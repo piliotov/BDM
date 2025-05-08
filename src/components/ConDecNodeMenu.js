@@ -32,10 +32,9 @@ const ACTION_ICONS = {
 
 // Example utility functions to mimic ContextPadProvider logic
 function getContextPadActions(node, { onEdit, onDelete, onAppend }) {
-  // You can expand this logic to match BPMN types and rules as in ContextPadProvider.js
   const actions = [];
 
-  // Example: always allow edit, append, delete if handlers are provided
+  // Always allow edit and delete if handlers are provided
   if (onEdit) {
     actions.push({
       key: 'edit',
@@ -43,7 +42,13 @@ function getContextPadActions(node, { onEdit, onDelete, onAppend }) {
       ...ACTION_ICONS.edit
     });
   }
-  if (onAppend) {
+  // Allow append for activity nodes that are not INIT
+  if (
+    onAppend &&
+    node &&
+    node.type === 'activity' &&
+    node.constraint !== 'init'
+  ) {
     actions.push({
       key: 'append',
       handler: onAppend,

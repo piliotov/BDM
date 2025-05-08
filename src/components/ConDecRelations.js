@@ -175,16 +175,16 @@ export function ConDecRelation({
     negation
   } = getRelationVisual(relation.type, isSelected);
 
-  // Calculate midpoint for label
+  // Calculate midpoint for label and negation marker
   const midIndex = Math.floor(currentWaypoints.length / 2);
   const midPoint = currentWaypoints[midIndex] || {
     x: (currentWaypoints[0].x + currentWaypoints[currentWaypoints.length - 1].x) / 2,
     y: (currentWaypoints[0].y + currentWaypoints[currentWaypoints.length - 1].y) / 2
   };
 
-  // Calculate label position with offset
-  const labelX = midPoint.x + (labelOffset ? labelOffset.x : 0);
-  const labelY = midPoint.y + (labelOffset ? labelOffset.y : 0);
+  // Place label at the same position as the negation/circle marker
+  const labelX = midPoint.x;
+  const labelY = midPoint.y;
 
   // Control point size adjusts with zoom
   const controlPointSize = 8 / zoom;

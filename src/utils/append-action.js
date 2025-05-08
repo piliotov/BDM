@@ -1,0 +1,48 @@
+import { NODE_TYPES, CONSTRAINTS } from './diagramUtils';
+import { RELATION_TYPES } from './relationUtils';
+
+/**
+ * Append a new activity to the right of the given node and connect them.
+ * @param {Object} node - The node to append to.
+ * @param {Object} diagram - The current diagram.
+ * @param {Function} saveToUndoStack - Undo stack function.
+ * @returns {Object} { updatedDiagram, newNode }
+ */
+export function appendActivityAndConnect(node, diagram, saveToUndoStack) {
+  if (!diagram || !node) return null;
+  saveToUndoStack && saveToUndoStack();
+
+  const nodeWidth = 100;
+  const gap = 60;
+  const newX = node.x + nodeWidth + gap;
+  const newY = node.y;
+
+  const newNode = {
+    id: `activity_${Date.now()}`,
+    type: NODE_TYPES.ACTIVITY,
+    name: `Activity ${diagram.nodes.length + 1}`,
+    x: newX,
+    y: newY,
+    constraint: null,
+    constraintValue: null
+  };
+
+  const newRelation = {
+    id: `relation_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+    type: RELATION_TYPES.RESPONSE,
+    sourceId: node.id,
+    targetId: newNode.id,
+    waypoints: [
+      { x: node.x + nodeWidth / 2, y: node.y },
+      { x: newX - nodeWidth / 2, y: newY }
+    ]
+  };
+
+  const updatedDiagram = {
+    ...diagram,
+    nodes: [...diagram.nodes, newNode],
+    relations: [...diagram.relations, newRelation]
+  };
+
+  return { updatedDiagram, newNode };
+}

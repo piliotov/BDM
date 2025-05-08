@@ -2,6 +2,7 @@ import {
   getDockingPoint, 
   layoutConnection, 
 } from './canvasUtils';
+import { CONSTRAINTS } from './diagramUtils';
 
 // --- Relation Types ---
 export const RELATION_TYPES = {
@@ -216,15 +217,14 @@ export function getRelationVisual(type, isSelected) {
  * @param {Object} diagram Current diagram
  * @param {string} sourceId Source node ID
  * @param {string} targetId Target node ID
- * @param {Object} constraints Constraint types
  * @returns {boolean} Whether relation is allowed
  */
-  export function isRelationAllowed(diagram, sourceId, targetId, constraints) {
+export function isRelationAllowed(diagram, sourceId, targetId) {
   const targetNode = diagram.nodes.find(n => n.id === targetId);
   if (!targetNode) return false;
 
   // Case 1: Prevent relations to INIT nodes
-  if (targetNode.constraint === constraints.INIT) {
+  if (targetNode.constraint === CONSTRAINTS.INIT) {
     return false;
   }
 
@@ -234,15 +234,15 @@ export function getRelationVisual(type, isSelected) {
 
   // Case 2: Check other constraints
   switch (targetNode.constraint) {
-    case constraints.ABSENCE:
+    case CONSTRAINTS.ABSENCE:
       // No relations allowed
       return false;
 
-    case constraints.ABSENCE_N:
+    case CONSTRAINTS.ABSENCE_N:
       // Cannot exceed the maximum allowed count
       return incomingCount < (targetNode.constraintValue || 0);
 
-    case constraints.EXACTLY_N:
+    case CONSTRAINTS.EXACTLY_N:
       // Cannot exceed exact count
       return incomingCount < (targetNode.constraintValue || 0);
 

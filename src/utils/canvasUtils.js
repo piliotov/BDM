@@ -163,38 +163,39 @@ export function createManhattanWaypoints(
   // Get source and target dock points
   const sourceDock = getDockingPoint(source, target, sourceSize);
   const targetDock = getDockingPoint(target, source, targetSize);
-  
+
   // Get direction from source to target
   const mainDirection = getDirection(sourceDock, targetDock);
-  
-  // Create waypoints array
-  const waypoints = [];
-  
-  // Add source docking point
-  waypoints.push({ x: sourceDock.x, y: sourceDock.y });
-  
+
   // Get horizontal and vertical distance
   const dx = targetDock.x - sourceDock.x;
   const dy = targetDock.y - sourceDock.y;
   const adx = Math.abs(dx);
   const ady = Math.abs(dy);
-  
-  // Create a bend point if there's significant distance
-  if (adx > connectionPadding || ady > connectionPadding) {
-    if (mainDirection === DIRECTION.EAST || mainDirection === DIRECTION.WEST) {
-      // For horizontal primary direction, add mid-x point
-      waypoints.push({ x: sourceDock.x + dx/2, y: sourceDock.y });
-      waypoints.push({ x: sourceDock.x + dx/2, y: targetDock.y });
-    } else {
-      // For vertical primary direction, add mid-y point
-      waypoints.push({ x: sourceDock.x, y: sourceDock.y + dy/2 });
-      waypoints.push({ x: targetDock.x, y: sourceDock.y + dy/2 });
-    }
+
+  // If nodes are aligned horizontally or vertically, just use two points
+  if (adx < 1e-2 || ady < 1e-2) {
+    return [
+      { x: sourceDock.x, y: sourceDock.y },
+      { x: targetDock.x, y: targetDock.y }
+    ];
   }
-  
-  // Add target docking point
+
+  // Otherwise, create a bend
+  const waypoints = [];
+  waypoints.push({ x: sourceDock.x, y: sourceDock.y });
+
+  if (mainDirection === DIRECTION.EAST || mainDirection === DIRECTION.WEST) {
+    // For horizontal primary direction, add mid-x point
+    waypoints.push({ x: sourceDock.x + dx/2, y: sourceDock.y });
+    waypoints.push({ x: sourceDock.x + dx/2, y: targetDock.y });
+  } else {
+    // For vertical primary direction, add mid-y point
+    waypoints.push({ x: sourceDock.x, y: sourceDock.y + dy/2 });
+    waypoints.push({ x: targetDock.x, y: sourceDock.y + dy/2 });
+  }
+
   waypoints.push({ x: targetDock.x, y: targetDock.y });
-  
   return waypoints;
 }
 

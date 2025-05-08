@@ -5,7 +5,8 @@ import { ConDecNodeMenu } from './ConDecNodeMenu';
 import { snapNodeDuringDrag, createSvgGrid } from '../utils/gridUtil';
 import { initialDiagram, diagramToXML, CONSTRAINTS } from '../utils/diagramUtils';
 import { isRelationAllowed, RELATION_TYPES } from '../utils/relationUtils';
-import { addNode, handleNodeRename as utilHandleNodeRename, appendActivityAndConnect } from '../utils/nodeUtils';
+import { addNode, handleNodeRename as utilHandleNodeRename } from '../utils/nodeUtils';
+import { appendActivityAndConnect } from '../utils/append-action';
 
 // Constants for local storage
 const LOCAL_STORAGE_KEY = 'condec-diagram';
@@ -347,6 +348,7 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
   
   // Append a new activity to the right and create a relation
   const handleAppendActivity = useCallback((node) => {
+    // Use the new append utility
     const result = appendActivityAndConnect(node, diagram, saveToUndoStack);
     if (!result) return;
     setDiagram(result.updatedDiagram);
