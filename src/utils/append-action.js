@@ -1,15 +1,22 @@
-import { NODE_TYPES, CONSTRAINTS } from './diagramUtils';
+import { NODE_TYPES } from './diagramUtils';
 import { RELATION_TYPES } from './relationUtils';
+import { isRelationAllowed } from './nodeUtils';
 
 /**
  * Append a new activity to the right of the given node and connect them.
  * @param {Object} node - The node to append to.
  * @param {Object} diagram - The current diagram.
  * @param {Function} saveToUndoStack - Undo stack function.
- * @returns {Object} { updatedDiagram, newNode }
+ * @returns {Object|null} { updatedDiagram, newNode } or null if not allowed
  */
 export function appendActivityAndConnect(node, diagram, saveToUndoStack) {
   if (!diagram || !node) return null;
+
+  // Check if relation is allowed (simulate as if new node is target)
+  // Always allow for new node (no constraints yet)
+  // But if you want to prevent appending from nodes with constraints, check here:
+  // if (!isRelationAllowed(diagram, node.id, 'newNodeId')) return null;
+
   saveToUndoStack && saveToUndoStack();
 
   const nodeWidth = 100;

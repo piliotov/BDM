@@ -35,18 +35,6 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
   // Calculate the center offset based on window size
   const [canvasOffset, setCanvasOffset] = useState({ x: 0, y: 0 });
 
-  const [contextMenu, setContextMenu] = useState(null);
-
-  const handleContextMenu = useCallback((e, nodeId) => {
-    e.preventDefault();
-    const rect = e.target.getBoundingClientRect();
-    setContextMenu({
-      nodeId,
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top
-    });
-  }, []);
-
   // Update canvas size and center offset when window resizes
   useEffect(() => {
     const updateCanvasSize = () => {
@@ -348,26 +336,11 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
   
   // Append a new activity to the right and create a relation
   const handleAppendActivity = useCallback((node) => {
-    // Use the new append utility
     const result = appendActivityAndConnect(node, diagram, saveToUndoStack);
     if (!result) return;
     setDiagram(result.updatedDiagram);
     setSelectedElement({ type: 'node', element: result.newNode });
   }, [diagram, saveToUndoStack]);
-
-  // Close context menu when clicking elsewhere
-  useEffect(() => {
-    const handleDocumentClick = (e) => {
-      if (contextMenu && !e.target.closest('.bpmn-menu-item')) {
-        setContextMenu(null);
-      }
-    };
-    
-    document.addEventListener('mousedown', handleDocumentClick);
-    return () => {
-      document.removeEventListener('mousedown', handleDocumentClick);
-    };
-  }, [contextMenu]);
 
   // Prevent default context menu on right click
   useEffect(() => {
@@ -1104,25 +1077,10 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
           panOrigin={panOrigin}
           setPanOrigin={setPanOrigin}
           onNodeDrag={handleNodeDrag}
-          onNodeContextMenu={handleContextMenu}
+          onAppend={handleAppendActivity}
         />
         {renderEditPopup()}
         {renderPalette()}
-        
-        {/* Render BPMN-style context menu if active */}
-        {contextMenu && (
-        <ConDecNodeMenu
-          node={diagram.nodes.find(n => n.id === contextMenu.nodeId)}
-          onEdit={() => {
-            const node = diagram.nodes.find(n => n.id === contextMenu.nodeId);
-            setEditNodePopup({ node: { ...node } });
-            setEditNodePopupPos({ x: null, y: null });
-          }}
-          onDelete={() => handleDelete()}
-          onAppend={handleAppendActivity}
-          zoom={zoom}
-        />
-        )}
       </div>
     </div>
   );

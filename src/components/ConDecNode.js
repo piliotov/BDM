@@ -23,8 +23,7 @@ export function ConDecNode({
   onDragStart,
   onMenu,
   onRename,
-  onRenameBlur,
-  onContextMenu // Add this prop
+  onRenameBlur
 }) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(node.name);
@@ -106,11 +105,6 @@ export function ConDecNode({
       onMouseDown={(e) => {
         e.stopPropagation();
         onDragStart(e);
-      }}
-      onContextMenu={(e) => {
-        if (onContextMenu) {
-          onContextMenu(e);
-        }
       }}
       style={{ pointerEvents: 'all' }}
     >

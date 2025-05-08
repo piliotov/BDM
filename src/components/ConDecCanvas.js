@@ -58,14 +58,7 @@ export function ConDecCanvas({
 
   // --- Node drag/relation logic ---
   const handleNodeInteractionStart = (nodeId, e) => {
-    // Handle right-click for context menu
-    if (e.button === 2) {
-      e.preventDefault();
-      e.stopPropagation();
-      onNodeContextMenu && onNodeContextMenu(e, nodeId);
-      return;
-    }
-    
+    // Only handle drag or relation creation
     if (mode === 'addRelation') {
       const sourceNode = diagram.nodes.find(n => n.id === nodeId);
       setNewRelation({
@@ -170,7 +163,7 @@ export function ConDecCanvas({
               node={node}
               onEdit={() => onNodeMenuEdit(node)}
               onDelete={onNodeMenuDelete}
-              onAppend={onAppend ? () => onAppend(node) : undefined} // <-- bind node
+              onAppend={onAppend ? () => onAppend(node) : undefined}
               onClose={onNodeMenuClose}
               zoom={zoom}
             />
@@ -285,7 +278,15 @@ export function ConDecCanvas({
     
     // If updatedRelations is provided (e.g., when dragging label), use that
     if (updatedRelations) {
-      onRelationEdit && onRelationEdit(updatedRelations);
+      // Create a merged list of relations, replacing only the updated one
+      const mergedRelations = diagram.relations.map(rel => {
+        // Find if this relation is in updatedRelations
+        const updatedRel = updatedRelations.find(r => r.id === rel.id);
+        // If found, use the updated version, otherwise keep the existing one
+        return updatedRel || rel;
+      });
+      
+      onRelationEdit && onRelationEdit(mergedRelations);
       return;
     }
     

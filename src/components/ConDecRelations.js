@@ -182,7 +182,7 @@ export function ConDecRelation({
     y: (currentWaypoints[0].y + currentWaypoints[currentWaypoints.length - 1].y) / 2
   };
 
-  // Place label at the same position as the negation/circle marker
+  // Place label at the midpoint plus the label offset
   const labelX = midPoint.x;
   const labelY = midPoint.y;
 
@@ -314,6 +314,7 @@ export function ConDecRelation({
         className="condec-relation-label" 
         cursor={isSelected ? "move" : "pointer"}
         onMouseDown={isSelected ? handleLabelMouseDown : handleRelationClick}
+        transform={`translate(${labelOffset.x || 0},${labelOffset.y || 0})`}
         pointerEvents="all" // Ensure click events work on this element
       >
         {/* Background rect for easier selection */}
