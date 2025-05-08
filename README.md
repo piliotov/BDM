@@ -35,7 +35,7 @@ A web-based modeling tool for creating and editing ConDec (Constraint-based Decl
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/imaster171/BDM.git
+   git clone https://github.com/piliotov/BDM.git
    cd BDM
    ```
 
