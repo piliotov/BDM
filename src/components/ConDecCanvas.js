@@ -2,57 +2,9 @@ import React, { useRef } from 'react';
 import { ConDecRelation } from './ConDecRelations';
 import { ConDecNode } from './ConDecNode';
 import { ConDecNodeMenu } from './ConDecNodeMenu';
-
-// Helper: intersection of line and rectangle
-function calculateIntersectionPoint(source, target, width = 100, height = 50) {
-  const dx = target.x - source.x;
-  const dy = target.y - source.y;
-  const length = Math.sqrt(dx * dx + dy * dy);
-  const nx = dx / length;
-  const ny = dy / length;
-  const halfWidth = width / 2;
-  const halfHeight = height / 2;
-  let tx = Infinity, ty = Infinity;
-  if (ny !== 0) {
-    const tTop = (target.y - halfHeight - source.y) / dy;
-    const tBottom = (target.y + halfHeight - source.y) / dy;
-    if (tTop >= 0 && tTop <= 1) {
-      const x = source.x + tTop * dx;
-      if (Math.abs(x - target.x) <= halfWidth) {
-        tx = tTop; ty = tTop;
-      }
-    }
-    if (tBottom >= 0 && tBottom <= 1) {
-      const x = source.x + tBottom * dx;
-      if (Math.abs(x - target.x) <= halfWidth) {
-        if (tBottom < tx) { tx = tBottom; ty = tBottom; }
-      }
-    }
-  }
-  if (nx !== 0) {
-    const tLeft = (target.x - halfWidth - source.x) / dx;
-    const tRight = (target.x + halfWidth - source.x) / dx;
-    if (tLeft >= 0 && tLeft <= 1) {
-      const y = source.y + tLeft * dy;
-      if (Math.abs(y - target.y) <= halfHeight) {
-        if (tLeft < tx) { tx = tLeft; ty = tLeft; }
-      }
-    }
-    if (tRight >= 0 && tRight <= 1) {
-      const y = source.y + tRight * dy;
-      if (Math.abs(y - target.y) <= halfHeight) {
-        if (tRight < tx) { tx = tRight; ty = tRight; }
-      }
-    }
-  }
-  if (tx !== Infinity) {
-    return {
-      x: source.x + tx * dx,
-      y: source.y + ty * dy
-    };
-  }
-  return target;
-}
+import { calculateIntersectionPoint } from '../utils/geometryUtils';
+import { useCanvasPanning } from '../utils/canvasUtils';
+import { updateRelationsForNode } from '../utils/relationUtils';
 
 export function ConDecCanvas({
   diagram,
@@ -71,6 +23,7 @@ export function ConDecCanvas({
   setDraggedElement,
   onCanvasClick,
   canvasOffset = { x: 0, y: 0 },
+  setCanvasOffset, // New prop for updating canvas offset
   onCanvasMouseDown,
   onSelectionMouseMove,
   onSelectionMouseUp,
@@ -79,12 +32,40 @@ export function ConDecCanvas({
   selectionBox,
   onNodeMenuEdit,
   onNodeMenuDelete,
-  onNodeMenuClose
+  onNodeMenuClose,
+  onAppend, // <-- add this prop
+  // New panning state props
+  isPanning = false,
+  setIsPanning,
+  panStart = { x: 0, y: 0 },
+  setPanStart,
+  panOrigin = { x: 0, y: 0 },
+  setPanOrigin,
+  onNodeDrag,
+  onNodeContextMenu
 }) {
   const svgRef = useRef();
 
+  // Set up canvas panning functionality
+  const { handlePanStart, handlePanMove, handlePanEnd } = useCanvasPanning({
+    setCanvasOffset,
+    setIsPanning,
+    setPanStart,
+    setPanOrigin,
+    canvasOffset,
+    zoom
+  });
+
   // --- Node drag/relation logic ---
   const handleNodeInteractionStart = (nodeId, e) => {
+    // Handle right-click for context menu
+    if (e.button === 2) {
+      e.preventDefault();
+      e.stopPropagation();
+      onNodeContextMenu && onNodeContextMenu(e, nodeId);
+      return;
+    }
+    
     if (mode === 'addRelation') {
       const sourceNode = diagram.nodes.find(n => n.id === nodeId);
       setNewRelation({
@@ -189,6 +170,7 @@ export function ConDecCanvas({
               node={node}
               onEdit={() => onNodeMenuEdit(node)}
               onDelete={onNodeMenuDelete}
+              onAppend={onAppend ? () => onAppend(node) : undefined} // <-- bind node
               onClose={onNodeMenuClose}
               zoom={zoom}
             />
@@ -209,11 +191,18 @@ export function ConDecCanvas({
     );
   };
 
+  // Enhance handleMouseMove to handle panning
   const handleMouseMove = (e) => {
     const rect = svgRef.current.getBoundingClientRect();
     const currentX = e.clientX - rect.left;
     const currentY = e.clientY - rect.top;
     setMousePosition && setMousePosition({ x: currentX, y: currentY });
+
+    // Handle panning when in hand mode and mouse button is pressed
+    if (isPanning && mode === 'hand') {
+      handlePanMove(e, isPanning, panStart, panOrigin);
+      return;
+    }
 
     if (draggedElement) {
       // Convert mouse movement to diagram coordinates (centered)
@@ -229,7 +218,18 @@ export function ConDecCanvas({
         }
         return node;
       });
-      if (typeof onNodeEdit === 'function') onNodeEdit(updatedNodes);
+
+      // Update relations connected to the dragged node
+      const draggedNode = updatedNodes.find(node => node.id === draggedElement.id);
+      const updatedRelations = updateRelationsForNode(draggedNode, { ...diagram, nodes: updatedNodes });
+
+      // Update diagram with new node positions and relation waypoints
+      if (typeof onNodeEdit === 'function') {
+        onNodeEdit(updatedNodes);
+      }
+      if (typeof onRelationEdit === 'function') {
+        onRelationEdit(updatedRelations);
+      }
     } else if (newRelation && newRelation.sourceId) {
       setNewRelation && setNewRelation(prev => ({
         ...prev,
@@ -241,7 +241,14 @@ export function ConDecCanvas({
     }
   };
 
+  // Enhance handleMouseUp to handle panning
   const handleMouseUp = (e) => {
+    // End panning if active
+    if (isPanning) {
+      handlePanEnd();
+      return;
+    }
+
     if (draggedElement) {
       setDraggedElement && setDraggedElement(null);
     } else if (newRelation && newRelation.sourceId) {
@@ -255,6 +262,20 @@ export function ConDecCanvas({
       setNewRelation && setNewRelation(null);
     } else if (mode === 'select' && selectionBox) {
       onSelectionMouseUp && onSelectionMouseUp(e);
+    }
+  };
+
+  // Enhanced canvas mouse down handler to support panning
+  const handleCanvasMouseDown = (e) => {
+    // Start panning if in hand mode and left mouse button is pressed
+    if (mode === 'hand' && e.button === 0 && e.target.classList.contains('condec-canvas')) {
+      handlePanStart(e);
+      return;
+    }
+    
+    // Otherwise, delegate to the provided handler
+    if (onCanvasMouseDown) {
+      onCanvasMouseDown(e);
     }
   };
 
@@ -309,7 +330,7 @@ export function ConDecCanvas({
   // Set cursor style based on current mode
   let cursorStyle = 'default';
   if (mode === 'hand') {
-    cursorStyle = draggedElement ? 'grabbing' : 'default';
+    cursorStyle = isPanning ? 'grabbing' : (draggedElement ? 'grabbing' : 'grab');
   } else if (mode === 'select') {
     cursorStyle = 'crosshair';
   }
@@ -324,54 +345,12 @@ export function ConDecCanvas({
         onClick={onCanvasClick}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
-        onMouseDown={onCanvasMouseDown}
+        onMouseDown={handleCanvasMouseDown}
         onWheel={onCanvasWheel}
+        onContextMenu={(e) => e.preventDefault()} // Prevent default context menu
         style={{ cursor: cursorStyle, userSelect: 'none' }}
       >
         <g transform={`translate(${canvasOffset.x},${canvasOffset.y}) scale(${zoom})`}>
-          <defs>
-            <marker 
-              id="arrow" 
-              markerWidth="18" 
-              markerHeight="18" 
-              refX="12" 
-              refY="4.5" 
-              orient="auto" 
-              markerUnits="strokeWidth">
-              <path d="M0,0 L0,9 L13,4.5 z" fill="#333" />
-            </marker>
-            <marker 
-              id="arrow-neg" 
-              markerWidth="18" 
-              markerHeight="18" 
-              refX="12" 
-              refY="4.5" 
-              orient="auto" 
-              markerUnits="strokeWidth">
-              <path d="M0,0 L0,9 L13,4.5 z" fill="red" />
-            </marker>
-            <marker 
-              id="arrow-start" 
-              markerWidth="18" 
-              markerHeight="18" 
-              refX="6" 
-              refY="4.5" 
-              orient="auto" 
-              markerUnits="strokeWidth">
-              <path d="M13,0 L13,9 L0,4.5 z" fill="#333" />
-            </marker>
-            <marker 
-              id="arrow-neg-start" 
-              markerWidth="18" 
-              markerHeight="18" 
-              refX="6" 
-              refY="4.5" 
-              orient="auto" 
-              markerUnits="strokeWidth">
-              <path d="M13,0 L13,9 L0,4.5 z" fill="red" />
-            </marker>
-          </defs>
-          
           {/* Render diagram elements with z-index management */}
           {renderDiagramElements()}
           

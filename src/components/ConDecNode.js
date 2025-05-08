@@ -23,7 +23,8 @@ export function ConDecNode({
   onDragStart,
   onMenu,
   onRename,
-  onRenameBlur
+  onRenameBlur,
+  onContextMenu // Add this prop
 }) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(node.name);
@@ -94,19 +95,24 @@ export function ConDecNode({
       data-node-id={node.id}
       transform={`translate(0, 0)`}
       onClick={(e) => { 
-        e.stopPropagation(); // Stop event propagation
+        e.stopPropagation();
         onSelect(e); 
       }}
       onDoubleClick={(e) => {
-        e.stopPropagation(); // Stop event propagation
+        e.stopPropagation();
         setEditing(true);
         if (onDoubleClick) onDoubleClick();
       }}
       onMouseDown={(e) => {
-        e.stopPropagation(); // Stop event propagation
+        e.stopPropagation();
         onDragStart(e);
       }}
-      style={{ pointerEvents: 'all' }} // Ensure all mouse events are captured
+      onContextMenu={(e) => {
+        if (onContextMenu) {
+          onContextMenu(e);
+        }
+      }}
+      style={{ pointerEvents: 'all' }}
     >
       <rect
         x={x - width/2}

@@ -1,142 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { generatePath } from '../utils/geometryUtils';
+import { getRelationVisual } from '../utils/relationUtils';
 
-// --- Relation Types ---
-export const RELATION_TYPES = {
-    RESP_EXISTENCE: 'resp_existence', 
-    RESPONSE: 'response',
-    PRECEDENCE: 'precedence',
-    SUCCESSION: 'succession',
-    COEXISTENCE: 'coexistence',
-    ALT_RESPONSE: 'alt_response',
-    ALT_PRECEDENCE: 'alt_precedence',
-    ALT_SUCCESSION: 'alt_succession',
-    CHAIN_RESPONSE: 'chain_response',
-    CHAIN_PRECEDENCE: 'chain_precedence',
-    CHAIN_SUCCESSION: 'chain_succession',
-    RESP_ABSENCE: 'resp_absence',
-    NOT_COEXISTENCE: 'not_coexistence',
-    NEG_RESPONSE: 'neg_response',
-    NEG_PRECEDENCE: 'neg_precedence',
-    NEG_SUCCESSION: 'neg_succession',
-    NEG_ALT_RESPONSE: 'neg_alt_response',
-    NEG_ALT_PRECEDENCE: 'neg_alt_precedence',
-    NEG_ALT_SUCCESSION: 'neg_alt_succession',
-    NEG_CHAIN_RESPONSE: 'neg_chain_response',
-    NEG_CHAIN_PRECEDENCE: 'neg_chain_precedence',
-    NEG_CHAIN_SUCCESSION: 'neg_chain_succession'
-};
-
-// --- Relation Visualization Helper ---
-export function getRelationVisual(type, isSelected) {
-  const baseStyle = {
-    stroke: isSelected ? '#1a73e8' : '#444',
-    strokeWidth: isSelected ? 2.5 : 1.5,  // Keep the visual stroke width reasonable
-    cursor: 'pointer',
-  };
-
-  let style = { ...baseStyle };
-  let sourceBall = false;
-  let targetBall = false;
-  let targetArrow = false;
-  let sourceArrow = false;
-  let negation = false;
-  let parallel = false;
-  let treeparallel = false;
-
-  switch (type) {
-    case RELATION_TYPES.RESP_EXISTENCE:
-      sourceBall = true;
-      break;
-    case RELATION_TYPES.COEXISTENCE:
-      sourceBall = true;
-      targetBall = true;
-      break;
-    case RELATION_TYPES.RESPONSE:
-      sourceBall = true;
-      targetArrow = true;
-      break;
-    case RELATION_TYPES.PRECEDENCE:
-      targetArrow = true;
-      parallel = true;
-      break;
-    case RELATION_TYPES.SUCCESSION:
-      sourceBall = true;
-      targetArrow = true;
-      parallel = true;
-      break;
-    case RELATION_TYPES.ALT_RESPONSE:
-      sourceBall = true;
-      targetArrow = true;
-      parallel = true;
-      break;
-    case RELATION_TYPES.ALT_PRECEDENCE:
-      sourceArrow = true;
-      targetBall = true;
-      parallel = true;
-      break;
-    case RELATION_TYPES.ALT_SUCCESSION:
-      sourceBall = true;
-      targetBall = true;
-      parallel = true;
-      break;
-    case RELATION_TYPES.CHAIN_RESPONSE:
-      sourceBall = true;
-      targetArrow = true;
-      parallel = true;
-      break;
-    case RELATION_TYPES.CHAIN_PRECEDENCE:
-      sourceArrow = true;
-      targetBall = true;
-      parallel = true;
-      break;
-    case RELATION_TYPES.CHAIN_SUCCESSION:
-      sourceBall = true;
-      targetBall = true;
-      parallel = true;
-      break;
-    default:
-      targetArrow = true;
-  }
-
-  if (type.startsWith('neg_') || type.startsWith('NEG_') || type.includes('NEG')) {
-    negation = true;
-  }
-  
-  return { style, sourceBall, targetBall, targetArrow, sourceArrow, negation, parallel };
-}
-
-// Generate a smooth path through waypoints
-function generatePath(waypoints) {
-  if (!waypoints || waypoints.length < 2) return '';
-  
-  let path = `M${waypoints[0].x},${waypoints[0].y}`;
-  
-  // For just two points, use a straight line
-  if (waypoints.length === 2) {
-    path += ` L${waypoints[1].x},${waypoints[1].y}`;
-    return path;
-  }
-  
-  // For multiple points, use a smooth curve
-  for (let i = 0; i < waypoints.length - 1; i++) {
-    const curr = waypoints[i];
-    const next = waypoints[i + 1];
-    
-    // Use quadratic curves for middle segments
-    if (i === 0) {
-      path += ` Q${(curr.x + next.x) / 2},${(curr.y + next.y) / 2},${next.x},${next.y}`;
-    } else if (i < waypoints.length - 2) {
-      const nextNext = waypoints[i + 2];
-      const cp1 = { x: (curr.x + next.x) / 2, y: (curr.y + next.y) / 2 };
-      const cp2 = { x: (next.x + nextNext.x) / 2, y: (next.y + nextNext.y) / 2 };
-      path += ` C${cp1.x},${cp1.y},${cp2.x},${cp2.y},${next.x},${next.y}`;
-    } else {
-      path += ` L${next.x},${next.y}`;
-    }
-  }
-  
-  return path;
-}
+// Export relations types for backward compatibility
+export { RELATION_TYPES } from '../utils/relationUtils';
 
 // --- Render a single relation ---
 export function ConDecRelation({
@@ -305,8 +172,7 @@ export function ConDecRelation({
     targetBall,
     targetArrow,
     sourceArrow,
-    negation,
-    parallel
+    negation
   } = getRelationVisual(relation.type, isSelected);
 
   // Calculate midpoint for label
