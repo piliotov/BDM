@@ -1,4 +1,5 @@
 import React from 'react';
+import { transform } from 'tiny-svg';
 
 // Minimal BPMN-style context pad (floating round buttons)
 const ICON_SIZE = 22;
@@ -21,6 +22,44 @@ const AppendIcon = (
   </svg>
 );
 
+// Map action keys to icons and colors
+const ACTION_ICONS = {
+  edit: { icon: EditIcon, color: '#1976d2', title: 'Edit' },
+  append: { icon: AppendIcon, color: '#43a047', title: 'Append Activity' },
+  delete: { icon: DeleteIcon, color: '#d32f2f', title: 'Delete' },
+  // Add more actions/icons as needed
+};
+
+// Example utility functions to mimic ContextPadProvider logic
+function getContextPadActions(node, { onEdit, onDelete, onAppend }) {
+  // You can expand this logic to match BPMN types and rules as in ContextPadProvider.js
+  const actions = [];
+
+  // Example: always allow edit, append, delete if handlers are provided
+  if (onEdit) {
+    actions.push({
+      key: 'edit',
+      handler: onEdit,
+      ...ACTION_ICONS.edit
+    });
+  }
+  if (onAppend) {
+    actions.push({
+      key: 'append',
+      handler: onAppend,
+      ...ACTION_ICONS.append
+    });
+  }
+  if (onDelete) {
+    actions.push({
+      key: 'delete',
+      handler: onDelete,
+      ...ACTION_ICONS.delete
+    });
+  }
+  return actions;
+}
+
 export function ConDecNodeMenu({
   node,
   onEdit,
@@ -30,65 +69,62 @@ export function ConDecNodeMenu({
 }) {
   if (!node) return null;
 
-  // Always show the append icon if onAppend is provided
   const nodeWidth = 100;
   const nodeHeight = 50;
   const pad = 8 / zoom;
   const baseX = node.x + nodeWidth / 2 + pad;
   const baseY = node.y - nodeHeight / 2 - pad;
 
-  // Button style
+  const actions = getContextPadActions(node, { onEdit, onDelete, onAppend });
+
+ 
+  const btnClass = "condec-context-btn";
   const btnStyle = {
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
     width: `${ICON_SIZE}px`,
     height: `${ICON_SIZE}px`,
-    borderRadius: '50%',
-    background: '#fff',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.10)',
-    border: '1.5px solid #e0e0e0',
+    background: '#fff', // white background
+    border: '1px solid transparent',
     margin: '0 2px',
     cursor: 'pointer',
-    transition: 'box-shadow 0.15s',
+    transition: 'none',
     outline: 'none',
     padding: 0
   };
-
+// Add hover effect
   return (
-    <g
-      className="bpmn-context-pad"
-      style={{ pointerEvents: 'all' }}
-      transform={`translate(${baseX},${baseY}) scale(${1/zoom})`}
-    >
-      <foreignObject x={0} y={0} width={ICON_SIZE * 3 + 12} height={ICON_SIZE + 4}>
-        <div style={{ display: 'flex', gap: 4, background: 'none', pointerEvents: 'all' }}>
-          <button
-            style={btnStyle}
-            title="Edit"
-            tabIndex={-1}
-            onClick={e => { e.stopPropagation(); onEdit && onEdit(node); }}
-          >
-            {EditIcon}
-          </button>
-          <button
-            style={{ ...btnStyle, borderColor: '#43a047' }}
-            title="Append Activity"
-            tabIndex={-1}
-            onClick={e => { e.stopPropagation(); onAppend && onAppend(node); }}
-          >
-            {AppendIcon}
-          </button>
-          <button
-            style={{ ...btnStyle, borderColor: '#d32f2f' }}
-            title="Delete"
-            tabIndex={-1}
-            onClick={e => { e.stopPropagation(); onDelete && onDelete(node); }}
-          >
-            {DeleteIcon}
-          </button>
-        </div>
-      </foreignObject>
-    </g>
+    <>
+      <style>
+        {`
+          .condec-context-btn:hover {
+            opacity: 0.6; 
+          }
+        `}
+      </style>
+      <g
+        className="bpmn-context-pad"
+        style={{ pointerEvents: 'all' }}
+        transform={`translate(${baseX},${baseY}) scale(${1/zoom})`}
+      >
+        <foreignObject x={0} y={0} width={ICON_SIZE * actions.length + 12} height={ICON_SIZE + 4}>
+          <div style={{ display: 'flex', gap: 4, background: 'none', pointerEvents: 'all' }}>
+            {actions.map(action => (
+              <button
+                key={action.key}
+                className={btnClass}
+                style={{ ...btnStyle, borderColor: 'transparent' }}
+                title={action.title}
+                tabIndex={-1}
+                onClick={e => { e.stopPropagation(); action.handler && action.handler(node); }}
+              >
+                {action.icon}
+              </button>
+            ))}
+          </div>
+        </foreignObject>
+      </g>
+    </>
   );
 }
