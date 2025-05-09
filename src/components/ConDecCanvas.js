@@ -5,6 +5,7 @@ import { ConDecNodeMenu } from './ConDecNodeMenu';
 import { calculateIntersectionPoint } from '../utils/geometryUtils';
 import { useCanvasPanning } from '../utils/canvasUtils';
 import { updateRelationsForNode } from '../utils/relationUtils';
+import { RelationMarkers } from '../utils/relationIconUtils';
 
 export function ConDecCanvas({
   diagram,
@@ -351,6 +352,9 @@ export function ConDecCanvas({
         onContextMenu={(e) => e.preventDefault()} // Prevent default context menu
         style={{ cursor: cursorStyle, userSelect: 'none' }}
       >
+        {/* Use the RelationMarkers component from the utility */}
+        <RelationMarkers />
+
         <g transform={`translate(${canvasOffset.x},${canvasOffset.y}) scale(${zoom})`}>
           {/* Render diagram elements with z-index management */}
           {renderDiagramElements()}

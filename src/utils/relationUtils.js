@@ -3,18 +3,16 @@ import {
   layoutConnection, 
 } from './canvasUtils';
 import { CONSTRAINTS } from './diagramUtils';
+// We don't use getRelationMarkerIds directly in this file, but it's used by importers
+import { getRelationMarkerIds } from './relationIconUtils';
 
 // --- Relation Types ---
 export const RELATION_TYPES = {
-  RESP_EXISTENCE: 'resp_existence', 
-  RESPONSE: 'response',
-  PRECEDENCE: 'precedence',
-  RESPONDED_EXISTENCE: 'responded_existence',
-  CO_EXISTENCE: 'co_existence',
-  NON_RESPONSE: 'non_response',
-  NON_PRECEDENCE: 'non_precedence',
-  SUCCESSION: 'succession',
+  RESP_EXISTENCE: 'resp_existence',
   COEXISTENCE: 'coexistence',
+  RESPONSE: 'response', 
+  PRECEDENCE: 'precedence',
+  SUCCESSION: 'succession',
   ALT_RESPONSE: 'alt_response',
   ALT_PRECEDENCE: 'alt_precedence',
   ALT_SUCCESSION: 'alt_succession',
@@ -65,6 +63,23 @@ export function createRelation(sourceId, targetId, relationType, diagram) {
 }
 
 /**
+ * Calculate marker offset for proper line endings
+ * This function is used by components that import this file
+ * @param {string} markerId The ID of the marker
+ * @returns {number} The offset value to adjust the path
+ */
+function getMarkerOffset(markerId) {
+  if (!markerId) return 0;
+  
+  // Different markers need different offsets to make lines end precisely at the marker
+  if (markerId.includes('arrow')) return 5;
+  if (markerId.includes('ball')) return 5;
+  if (markerId.includes('arrow-ball')) return 8;
+  
+  return 0;
+}
+
+/**
  * Update relation waypoints dynamically when nodes move (bpmn-js behavior)
  * @param {Object} relation Relation to update
  * @param {Object} diagram Current diagram
@@ -81,6 +96,7 @@ export function updateRelationWaypoints(relation, diagram) {
   // For relations with just two points (direct), recalculate completely
   if (!relation.waypoints || relation.waypoints.length <= 2) {
     const newWaypoints = layoutConnection(sourceNode, targetNode);
+    
     return {
       ...relation,
       waypoints: newWaypoints
@@ -130,86 +146,54 @@ export function updateRelationsForNode(node, diagram) {
 }
 
 /**
- * Get relation visual style based on type (like bpmn-js)
- * @param {string} type Relation type
- * @param {boolean} isSelected Is relation selected
- * @returns {Object} Visual properties
+ * Get visual representation for a relation type
+ * @param {string} relationType - The type of relation
+ * @param {boolean} isSelected - Whether the relation is selected
+ * @returns {Object} Visual properties for the relation
  */
-export function getRelationVisual(type, isSelected) {
-  const baseStyle = {
-    stroke: isSelected ? '#1a73e8' : '#444',
-    strokeWidth: isSelected ? 2.5 : 1.5,  // Keep the visual stroke width reasonable
-    cursor: 'pointer',
-  };
-
-  let style = { ...baseStyle };
-  let sourceBall = false;
-  let targetBall = false;
-  let targetArrow = false;
-  let sourceArrow = false;
-  let negation = false;
-  let parallel = false;
-
-  switch (type) {
-    case RELATION_TYPES.RESP_EXISTENCE:
-      sourceBall = true;
-      break;
-    case RELATION_TYPES.COEXISTENCE:
-      sourceBall = true;
-      targetBall = true;
-      break;
-    case RELATION_TYPES.RESPONSE:
-      sourceBall = true;
-      targetArrow = true;
-      break;
-    case RELATION_TYPES.PRECEDENCE:
-      targetArrow = true;
-      parallel = true;
-      break;
-    case RELATION_TYPES.SUCCESSION:
-      sourceBall = true;
-      targetArrow = true;
-      parallel = true;
-      break;
-    case RELATION_TYPES.ALT_RESPONSE:
-      sourceBall = true;
-      targetArrow = true;
-      parallel = true;
-      break;
-    case RELATION_TYPES.ALT_PRECEDENCE:
-      sourceArrow = true;
-      targetBall = true;
-      parallel = true;
-      break;
-    case RELATION_TYPES.ALT_SUCCESSION:
-      sourceBall = true;
-      targetBall = true;
-      parallel = true;
-      break;
-    case RELATION_TYPES.CHAIN_RESPONSE:
-      sourceBall = true;
-      targetArrow = true;
-      parallel = true;
-      break;
-    case RELATION_TYPES.CHAIN_PRECEDENCE:
-      sourceArrow = true;
-      targetBall = true;
-      parallel = true;
-      break;
-    case RELATION_TYPES.CHAIN_SUCCESSION:
-      sourceBall = true;
-      targetBall = true;
-      parallel = true;
-      break;
-    default:
-      targetArrow = true;
-  }
-
-  if (type.startsWith('neg_') || type.startsWith('NEG_') || type.includes('NEG')) {
-    negation = true;
+export function getRelationVisual(relationType, isSelected) {
+  // Check if relation is negative
+  let neg = relationType.startsWith('neg_');
+  let rest = neg ? relationType.slice(4) : relationType;
+  
+  // Determine path style based on alt or chain prefix
+  let pathStyle = 'none'; // Default: single line
+  
+  if (rest.startsWith('alt_')) {
+    pathStyle = 'alt'; // Two parallel lines
+    rest = rest.slice(4);
+  } else if (rest.startsWith('chain_')) {
+    pathStyle = 'chain'; // Three parallel lines
+    rest = rest.slice(6);
   }
   
-  return { style, sourceBall, targetBall, targetArrow, sourceArrow, negation, parallel };
+  // The remaining part is the base relation type
+  let baseType = rest;
+
+  // Base style - same color for all relations
+  const baseStyle = {
+    stroke: isSelected ? '#1a73e8' : '#555555',
+    strokeWidth: isSelected ? 2 : 1.5,
+  };
+
+  // Negation logic - only changes the dash pattern, not the color
+  const isNegative = neg ||
+    relationType === 'not_coexistence' ||
+    relationType === 'resp_absence';
+
+  let style = { ...baseStyle };
+  let negation = false;
+
+  if (isNegative) {
+    negation = true;
+  }
+
+  return { 
+    style, 
+    negation, 
+    pathStyle,
+    baseType 
+  };
 }
 
 /**

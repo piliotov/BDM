@@ -181,22 +181,6 @@ export function createManhattanWaypoints(
     ];
   }
 
-  // Otherwise, create a bend
-  const waypoints = [];
-  waypoints.push({ x: sourceDock.x, y: sourceDock.y });
-
-  if (mainDirection === DIRECTION.EAST || mainDirection === DIRECTION.WEST) {
-    // For horizontal primary direction, add mid-x point
-    waypoints.push({ x: sourceDock.x + dx/2, y: sourceDock.y });
-    waypoints.push({ x: sourceDock.x + dx/2, y: targetDock.y });
-  } else {
-    // For vertical primary direction, add mid-y point
-    waypoints.push({ x: sourceDock.x, y: sourceDock.y + dy/2 });
-    waypoints.push({ x: targetDock.x, y: sourceDock.y + dy/2 });
-  }
-
-  waypoints.push({ x: targetDock.x, y: targetDock.y });
-  return waypoints;
 }
 
 /**

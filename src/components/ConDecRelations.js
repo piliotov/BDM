@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { generatePath } from '../utils/geometryUtils';
 import { getRelationVisual } from '../utils/relationUtils';
+import { getRelationMarkerIds } from '../utils/relationIconUtils';
 
 // Export relations types for backward compatibility
 export { RELATION_TYPES } from '../utils/relationUtils';
@@ -166,14 +167,11 @@ export function ConDecRelation({
   // Create path for the relation
   const pathData = generatePath(currentWaypoints);
   
-  const {
-    style,
-    sourceBall,
-    targetBall,
-    targetArrow,
-    sourceArrow,
-    negation
-  } = getRelationVisual(relation.type, isSelected);
+  // Use getRelationVisual to get style and negation state
+  const { style, negation } = getRelationVisual(relation.type, isSelected);
+
+  // Get marker IDs based on relation type
+  const { startMarkerId, endMarkerId } = getRelationMarkerIds(relation.type);
 
   // Calculate midpoint for label and negation marker
   const midIndex = Math.floor(currentWaypoints.length / 2);
@@ -217,10 +215,6 @@ export function ConDecRelation({
     setIsDraggingLabel(true);
   };
   
-  // Get source and target edge points for markers
-  const sourceEdgePoint = currentWaypoints[0];
-  const targetEdgePoint = currentWaypoints[currentWaypoints.length - 1];
-  
   // Handle relation click - ensure it captures events
   const handleRelationClick = (e) => {
     e.stopPropagation();
@@ -228,7 +222,7 @@ export function ConDecRelation({
       onSelect(e);
     }
   };
-  
+
   return (
     <g 
       className="condec-relation"
@@ -243,70 +237,29 @@ export function ConDecRelation({
         fill="none"
         pointerEvents="stroke"
       />
-      
+
       {/* Main visible path */}
       <path
         d={pathData}
         fill="none"
         {...style}
-        markerEnd={targetArrow ? 'url(#arrow)' : ''}
-        markerStart={sourceArrow ? 'url(#arrow-start)' : ''}
-        pointerEvents="none" // Don't handle events on this path (the invisible one above will catch them)
+        markerEnd={endMarkerId}
+        markerStart={startMarkerId}
+        pointerEvents="none"
       />
-      
-      {/* Source Ball */}
-      {sourceBall && (
-        <circle
-          cx={sourceEdgePoint.x}
-          cy={sourceEdgePoint.y}
-          r={controlPointSize / 1.5}
-          fill={style.stroke}
-          pointerEvents="all" // Ensure click events work on this element
-        />
-      )}
 
-      {/* Target Ball */}
-      {targetBall && (
-        <circle
-          cx={targetEdgePoint.x}
-          cy={targetEdgePoint.y}
-          r={controlPointSize / 1.5}
-          fill={style.stroke}
-          pointerEvents="all" // Ensure click events work on this element
-        />
-      )}
-
-      {/* Negation marker at midpoint */}
+      {/* Render negation marker at midpoint if needed - smaller and centered */}
       {negation && (
-        <g 
-          transform={`translate(${midPoint.x},${midPoint.y})`}
-          pointerEvents="all" // Ensure click events work on this element
-        >
-          <rect
-            x={-10}
-            y={-10}
-            width={20}
-            height={20}
-            fill="transparent" 
-            pointerEvents="all"
-          />
-          <line
-            x1={-8}
-            y1={-8}
-            x2={8}
-            y2={8}
-            stroke={style.stroke}
-            strokeWidth={style.strokeWidth}
-          />
-          <line
-            x1={8}
-            y1={-8}
-            x2={-8}
-            y2={8}
-            stroke={style.stroke}
-            strokeWidth={style.strokeWidth}
-          />
-        </g>
+        <use 
+          href="#midpoint-negation" 
+          x={midPoint.x} 
+          y={midPoint.y}
+          width={6/zoom}
+          height={6/zoom}
+          stroke={style.stroke}
+          transform={`translate(${-3/zoom},${-3/zoom})`}
+          pointerEvents="none"
+        />
       )}
 
       {/* Draggable Label */}
