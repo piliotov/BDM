@@ -173,12 +173,41 @@ export function ConDecRelation({
   // Get marker IDs based on relation type
   const { startMarkerId, endMarkerId } = getRelationMarkerIds(relation.type);
 
+  // Calculate the true midpoint along the path (by length)
+  function getPathMidpoint(points) {
+    if (points.length < 2) return points[0] || { x: 0, y: 0 };
+
+    // Calculate total length
+    let totalLength = 0;
+    const segmentLengths = [];
+    for (let i = 0; i < points.length - 1; i++) {
+      const dx = points[i + 1].x - points[i].x;
+      const dy = points[i + 1].y - points[i].y;
+      const len = Math.hypot(dx, dy);
+      segmentLengths.push(len);
+      totalLength += len;
+    }
+    if (totalLength === 0) return points[0];
+
+    // Find the segment containing the midpoint
+    let midDist = totalLength / 2;
+    let acc = 0;
+    for (let i = 0; i < segmentLengths.length; i++) {
+      if (acc + segmentLengths[i] >= midDist) {
+        const remain = midDist - acc;
+        const ratio = remain / segmentLengths[i];
+        const x = points[i].x + (points[i + 1].x - points[i].x) * ratio;
+        const y = points[i].y + (points[i + 1].y - points[i].y) * ratio;
+        return { x, y };
+      }
+      acc += segmentLengths[i];
+    }
+    // Fallback
+    return points[points.length - 1];
+  }
+
   // Calculate midpoint for label and negation marker
-  const midIndex = Math.floor(currentWaypoints.length / 2);
-  const midPoint = currentWaypoints[midIndex] || {
-    x: (currentWaypoints[0].x + currentWaypoints[currentWaypoints.length - 1].x) / 2,
-    y: (currentWaypoints[0].y + currentWaypoints[currentWaypoints.length - 1].y) / 2
-  };
+  const midPoint = getPathMidpoint(currentWaypoints);
 
   // Place label at the midpoint plus the label offset
   const labelX = midPoint.x;
@@ -254,8 +283,8 @@ export function ConDecRelation({
           href="#midpoint-negation" 
           x={midPoint.x} 
           y={midPoint.y}
-          width={6/zoom}
-          height={6/zoom}
+          width={20/zoom}
+          height={20/zoom}
           stroke={style.stroke}
           transform={`translate(${-3/zoom},${-3/zoom})`}
           pointerEvents="none"
