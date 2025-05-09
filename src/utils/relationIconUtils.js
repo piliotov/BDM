@@ -77,7 +77,6 @@ export function RelationMarkers() {
       
       {/* Negation marker */}
       <symbol id="midpoint-negation" viewBox="-5 -5 10 10">
-        <circle r="4" fill="white" fillOpacity="0.9" stroke="currentColor" strokeWidth="0.5" />
         <line x1="-2" y1="-1" x2="2" y2="-1" stroke="currentColor" strokeWidth="1" />
         <line x1="-2" y1="1" x2="2" y2="1" stroke="currentColor" strokeWidth="1" />
       </symbol>

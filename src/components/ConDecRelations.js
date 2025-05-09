@@ -267,31 +267,59 @@ export function ConDecRelation({
         pointerEvents="stroke"
       />
 
-      {/* Main visible path */}
-      <path
-        d={pathData}
-        fill="none"
-        {...style}
-        markerEnd={endMarkerId}
-        markerStart={startMarkerId}
-        pointerEvents="none"
-      />
+      /* Main visible path */
+        <path
+          d={pathData}
+          fill="none"
+          {...style}
+          markerEnd={endMarkerId}
+          markerStart={startMarkerId}
+          pointerEvents="none"
+        />
 
-      {/* Render negation marker at midpoint if needed - smaller and centered */}
-      {negation && (
-        <use 
+        {/* Render negation marker at midpoint perpendicular to path */}
+        {negation && (() => {
+          // Calculate direction at midpoint
+          let angle = 0;
+          if (currentWaypoints.length >= 2) {
+            // Find the segment containing the midpoint
+            let totalLength = 0;
+            const segmentLengths = [];
+            for (let i = 0; i < currentWaypoints.length - 1; i++) {
+          const dx = currentWaypoints[i + 1].x - currentWaypoints[i].x;
+          const dy = currentWaypoints[i + 1].y - currentWaypoints[i].y;
+          const len = Math.hypot(dx, dy);
+          segmentLengths.push(len);
+          totalLength += len;
+            }
+            let midDist = totalLength / 2;
+            let acc = 0;
+            for (let i = 0; i < segmentLengths.length; i++) {
+          if (acc + segmentLengths[i] >= midDist) {
+            // Direction vector of this segment
+            const dx = currentWaypoints[i + 1].x - currentWaypoints[i].x;
+            const dy = currentWaypoints[i + 1].y - currentWaypoints[i].y;
+            angle = Math.atan2(dy, dx) * 180 / Math.PI + 90; // Perpendicular
+            break;
+          }
+          acc += segmentLengths[i];
+            }
+          }
+          return (
+            <use 
           href="#midpoint-negation" 
           x={midPoint.x} 
           y={midPoint.y}
           width={20/zoom}
           height={20/zoom}
           stroke={style.stroke}
-          transform={`translate(${-3/zoom},${-3/zoom})`}
+          transform={`rotate(${angle},${midPoint.x},${midPoint.y})`}
           pointerEvents="none"
-        />
-      )}
+            />
+          );
+        })()}
 
-      {/* Draggable Label */}
+        {/* Draggable Label */}
       <g 
         className="condec-relation-label" 
         cursor={isSelected ? "move" : "pointer"}
