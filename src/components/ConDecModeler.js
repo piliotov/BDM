@@ -3,7 +3,7 @@ import '../styles/ConDecModeler.css';
 import { ConDecCanvas } from './ConDecCanvas';
 import { ConDecNodeMenu } from './ConDecNodeMenu';
 import { snapNodeDuringDrag, createSvgGrid } from '../utils/gridUtil';
-import { initialDiagram, diagramToXML, CONSTRAINTS } from '../utils/diagramUtils';
+import { initialDiagram, diagramToXML, CONSTRAINTS, xmlToDiagram } from '../utils/diagramUtils';
 import { isRelationAllowed, RELATION_TYPES } from '../utils/relationUtils';
 import { addNode, handleNodeRename as utilHandleNodeRename } from '../utils/nodeUtils';
 import { appendActivityAndConnect } from '../utils/append-action';
@@ -992,7 +992,7 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
         </button>
         <label 
           className="import-button" 
-          title="Import Diagram (JSON)" 
+          title="Import Diagram (XML)" 
           style={{ 
             background: '#43a047', 
             color: '#fff', 
@@ -1010,26 +1010,33 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
           }}
         >
           Import
-          <input type="file" accept=".json" onChange={(event) => {
+          <input type="file" accept=".xml" onChange={(event) => {
             const file = event.target.files[0];
             if (!file) return;
+
+            if (!window.confirm('Importing will overwrite your current model. Continue?')) {
+              event.target.value = null;
+              return;
+            }
 
             const reader = new FileReader();
             reader.onload = (e) => {
               try {
-                const importedDiagram = JSON.parse(e.target.result);
-
-                if (importedDiagram &&
-                    Array.isArray(importedDiagram.nodes) &&
-                    Array.isArray(importedDiagram.relations)) {
+                const xmlString = e.target.result;
+                const importedDiagram = xmlToDiagram(xmlString);
+                if (
+                  importedDiagram &&
+                  Array.isArray(importedDiagram.nodes) &&
+                  Array.isArray(importedDiagram.relations)
+                ) {
                   saveToUndoStack();
                   setDiagram(importedDiagram);
-                  setSelectedElement(null); // Deselect after import
+                  setSelectedElement(null);
                 } else {
-                  alert('Invalid diagram format. Required properties: nodes (array), relations (array).');
+                  alert('Invalid XML diagram format.');
                 }
               } catch (error) {
-                alert('Error importing diagram. Please check the file format.');
+                alert('Error importing diagram from XML. Please check the file format.');
                 console.error('Import error:', error);
               }
             };
