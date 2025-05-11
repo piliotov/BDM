@@ -90,7 +90,7 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
     };
   }, []);
 
-  // Save current state to undo stack
+  // Save current state to undo stack (call this only at the start of meaningful actions)
   const saveToUndoStack = useCallback(() => {
     setUndoStack(prev => [...prev, JSON.parse(JSON.stringify(diagram))]);
   }, [diagram]);
@@ -181,18 +181,25 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
     setMode('hand'); // Switch back to hand mode on selection
   };
 
-  // Handle node drag with snapping
+  // --- Node drag start: save to undo stack ---
+  const handleNodeDragStart = (nodeId, e) => {
+    saveToUndoStack();
+    setDraggedElement({
+      id: nodeId,
+      startX: e.clientX,
+      startY: e.clientY,
+      elementX: diagram.nodes.find(n => n.id === nodeId).x,
+      elementY: diagram.nodes.find(n => n.id === nodeId).y
+    });
+  };
+
+  // --- Node drag: update position, but do NOT save to undo stack here ---
   const handleNodeDrag = (nodeId, dragEvent) => {
     if (!diagram || !nodeId) return;
-    
     const node = diagram.nodes.find(n => n.id === nodeId);
     if (!node) return;
-    
-    // Calculate delta
     const deltaX = (dragEvent.clientX - dragEvent.startX) / zoom;
     const deltaY = (dragEvent.clientY - dragEvent.startY) / zoom;
-    
-    // Always snap to grid of 10px
     const newNode = snapNodeDuringDrag(node, deltaX, deltaY, 10);
     
     // Update node position
@@ -208,7 +215,8 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
 
   // replace in-file node rename
   const handleNodeRename = (nodeId, newName) => {
-    const updated = utilHandleNodeRename(nodeId, newName, diagram, saveToUndoStack);
+    saveToUndoStack();
+    const updated = utilHandleNodeRename(nodeId, newName, diagram, () => {});
     setDiagram(updated);
     setSelectedElement({ 
       type: 'node', 
@@ -218,7 +226,8 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
 
   // delegate adding new node
   const handleAddNode = e => {
-    const result = addNode(e, mode, diagram, canvasOffset, zoom, saveToUndoStack);
+    saveToUndoStack();
+    const result = addNode(e, mode, diagram, canvasOffset, zoom, () => {});
     if (!result) return;
     setDiagram(result.updatedDiagram);
     setSelectedElement({ type: 'node', element: result.newNode });
@@ -227,6 +236,7 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
 
   // Add missing handleRelationCreate function
   const handleRelationCreate = (sourceId, targetId) => {
+    saveToUndoStack();
     // Log current state for debugging
     console.log('Creating relation:', { sourceId, targetId });
     console.log('Current diagram state:', diagram);
@@ -1076,6 +1086,7 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
           setPanStart={setPanStart}
           panOrigin={panOrigin}
           setPanOrigin={setPanOrigin}
+          onNodeDragStart={handleNodeDragStart}
           onNodeDrag={handleNodeDrag}
           onAppend={handleAppendActivity}
         />

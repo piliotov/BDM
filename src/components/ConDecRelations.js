@@ -168,7 +168,7 @@ export function ConDecRelation({
   const pathData = generatePath(currentWaypoints);
   
   // Use getRelationVisual to get style and negation state
-  const { style, negation } = getRelationVisual(relation.type, isSelected);
+  const { style, negation, pathStyle } = getRelationVisual(relation.type, isSelected);
 
   // Get marker IDs based on relation type
   const { startMarkerId, endMarkerId } = getRelationMarkerIds(relation.type);
@@ -252,6 +252,180 @@ export function ConDecRelation({
     }
   };
 
+  // Helper to trim a path at both ends by a certain length (for parallel lines)
+  function trimWaypoints(pts, trimLen) {
+    if (pts.length < 2 || trimLen <= 0) return pts;
+    // Calculate total length
+    let totalLength = 0;
+    const segLens = [];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const dx = pts[i + 1].x - pts[i].x;
+      const dy = pts[i + 1].y - pts[i].y;
+      const len = Math.hypot(dx, dy);
+      segLens.push(len);
+      totalLength += len;
+    }
+    if (totalLength === 0) return pts;
+
+    // Only trim if the path is long enough
+    if (totalLength < trimLen * 2) return pts;
+
+    // Trim from start
+    let remain = trimLen;
+    let i = 0;
+    let start = { ...pts[0] };
+    while (remain > 0 && i < segLens.length) {
+      if (segLens[i] > remain) {
+        const ratio = remain / segLens[i];
+        start = {
+          x: pts[i].x + (pts[i + 1].x - pts[i].x) * ratio,
+          y: pts[i].y + (pts[i + 1].y - pts[i].y) * ratio
+        };
+        break;
+      }
+      remain -= segLens[i];
+      i++;
+    }
+
+    // Trim from end
+    remain = trimLen;
+    let j = segLens.length - 1;
+    let end = { ...pts[pts.length - 1] };
+    while (remain > 0 && j >= 0) {
+      if (segLens[j] > remain) {
+        const ratio = remain / segLens[j];
+        end = {
+          x: pts[j + 1].x - (pts[j + 1].x - pts[j].x) * ratio,
+          y: pts[j + 1].y - (pts[j + 1].y - pts[j].y) * ratio
+        };
+        break;
+      }
+      remain -= segLens[j];
+      j--;
+    }
+
+    // Build new trimmed waypoints
+    const newPts = [];
+    if (i === j + 1) {
+      // Only one segment remains after trimming
+      newPts.push(start, end);
+    } else {
+      newPts.push(start);
+      for (let k = i + 1; k <= j + 1; k++) {
+        newPts.push(pts[k]);
+      }
+      newPts.push(end);
+    }
+    return newPts;
+  }
+
+  // Helper: offset a polyline by a fixed distance perpendicular to the local segment direction at each point
+  function offsetPolyline(points, offset) {
+    if (points.length < 2 || offset === 0) return points.map(pt => ({ ...pt }));
+    const out = [];
+    for (let i = 0; i < points.length; i++) {
+      // For each point, get the direction of the segment at that point
+      let dx = 0, dy = 0;
+      if (i === 0) {
+        dx = points[1].x - points[0].x;
+        dy = points[1].y - points[0].y;
+      } else if (i === points.length - 1) {
+        dx = points[i].x - points[i - 1].x;
+        dy = points[i].y - points[i - 1].y;
+      } else {
+        // Use the angle bisector for smooth offset at corners
+        const dx1 = points[i].x - points[i - 1].x;
+        const dy1 = points[i].y - points[i - 1].y;
+        const dx2 = points[i + 1].x - points[i].x;
+        const dy2 = points[i + 1].y - points[i].y;
+        // Normalize
+        const len1 = Math.hypot(dx1, dy1);
+        const len2 = Math.hypot(dx2, dy2);
+        let nx1 = 0, ny1 = 0, nx2 = 0, ny2 = 0;
+        if (len1 > 0) {
+          nx1 = -dy1 / len1;
+          ny1 = dx1 / len1;
+        }
+        if (len2 > 0) {
+          nx2 = -dy2 / len2;
+          ny2 = dx2 / len2;
+        }
+        // Average the normals for smooth join
+        const nx = nx1 + nx2;
+        const ny = ny1 + ny2;
+        const nlen = Math.hypot(nx, ny);
+        if (nlen > 0) {
+          out.push({
+            x: points[i].x + (nx / nlen) * offset,
+            y: points[i].y + (ny / nlen) * offset
+          });
+          continue;
+        } else {
+          dx = dx1 + dx2;
+          dy = dy1 + dy2;
+        }
+      }
+      // Perpendicular vector (normalize)
+      const len = Math.hypot(dx, dy);
+      if (len === 0) {
+        out.push({ ...points[i] });
+      } else {
+        const nx = -dy / len;
+        const ny = dx / len;
+        out.push({
+          x: points[i].x + nx * offset,
+          y: points[i].y + ny * offset
+        });
+      }
+    }
+    return out;
+  }
+
+  // Helper: generate a smooth SVG path (cubic Bezier) from polyline points
+  function generateSmoothPath(points) {
+    if (points.length < 2) return '';
+    let d = `M ${points[0].x} ${points[0].y}`;
+    for (let i = 1; i < points.length; i++) {
+      const p0 = points[i - 1];
+      const p1 = points[i];
+      // Control points: halfway between points for smoothness
+      const c1x = p0.x + (p1.x - p0.x) / 3;
+      const c1y = p0.y + (p1.y - p0.y) / 3;
+      const c2x = p0.x + 2 * (p1.x - p0.x) / 3;
+      const c2y = p0.y + 2 * (p1.y - p0.y) / 3;
+      d += ` C ${c1x} ${c1y}, ${c2x} ${c2y}, ${p1.x} ${p1.y}`;
+    }
+    return d;
+  }
+
+  // Helper: get marker offset in px for a markerId (from relationUtils)
+  function getMarkerOffsetForId(markerId, isEnd = false, startMarkerId = null) {
+    if (!markerId) return 0;
+    // Special case: start ball and end arrow-ball (for coexistence)
+    if (
+      isEnd &&
+      markerId.includes('arrow-ball') &&
+      startMarkerId &&
+      startMarkerId.includes('ball')
+    ) {
+      return 25;
+    }
+    // Use larger values for end marker (secondary lines should stop further away)
+    if (markerId.includes('arrow-ball')) return isEnd ? 18 : 13;
+    if (markerId.includes('arrow')) return isEnd ? 16 : 8;
+    if (markerId.includes('ball')) return isEnd ? 14 : 7;
+    return 0;
+  }
+
+  // Helper: trim both ends of a polyline by different amounts
+  function trimBothEndsDiff(pts, trimStart, trimEnd) {
+    if ((!trimStart && !trimEnd) || pts.length < 2) return pts;
+    let trimmed = pts;
+    if (trimStart) trimmed = trimWaypoints(trimmed, trimStart);
+    if (trimEnd) trimmed = trimWaypoints(trimmed.slice().reverse(), trimEnd).slice().reverse();
+    return trimmed;
+  }
+
   return (
     <g 
       className="condec-relation"
@@ -262,64 +436,115 @@ export function ConDecRelation({
       <path
         d={pathData}
         stroke="transparent"
-        strokeWidth={10/zoom} // Wide hit area for easier selection
+        strokeWidth={10/zoom}
         fill="none"
         pointerEvents="stroke"
       />
 
-      /* Main visible path */
+      {/* Main center path with markers (always render for markers, even if alt, but invisible for alt) */}
+      {(pathStyle !== 'alt') && (
         <path
-          d={pathData}
+          d={generateSmoothPath(currentWaypoints)}
           fill="none"
           {...style}
           markerEnd={endMarkerId}
           markerStart={startMarkerId}
           pointerEvents="none"
         />
+      )}
 
-        {/* Render negation marker at midpoint perpendicular to path */}
-        {negation && (() => {
-          // Calculate direction at midpoint
-          let angle = 0;
-          if (currentWaypoints.length >= 2) {
-            // Find the segment containing the midpoint
-            let totalLength = 0;
-            const segmentLengths = [];
-            for (let i = 0; i < currentWaypoints.length - 1; i++) {
+      {/* For alt: render a center path only for markers, but invisible */}
+      {pathStyle === 'alt' && (startMarkerId || endMarkerId) && (
+        <path
+          d={generateSmoothPath(currentWaypoints)}
+          fill="none"
+          stroke="transparent"
+          strokeWidth={style.strokeWidth || 1.5}
+          markerEnd={endMarkerId}
+          markerStart={startMarkerId}
+          pointerEvents="none"
+        />
+      )}
+
+      {/* Parallel lines for alt/chain, trimmed at ends, no markers */}
+      {(() => {
+        const offset = 3; // px
+        // Use larger trim for side lines so they end before markers
+        const trimStart = getMarkerOffsetForId(startMarkerId, false);
+        const trimEnd = getMarkerOffsetForId(endMarkerId, true, startMarkerId);
+
+        function trimSideLine(pts) {
+          return trimBothEndsDiff(pts, trimStart, trimEnd);
+        }
+
+        if (pathStyle === 'chain') {
+          return [-offset, offset].map((off, i) => (
+            <path
+              key={`chain-parallel-${i}`}
+              d={generateSmoothPath(trimSideLine(offsetPolyline(currentWaypoints, off)))}
+              fill="none"
+              {...style}
+              pointerEvents="none"
+            />
+          ));
+        }
+        if (pathStyle === 'alt') {
+          return [offset, -offset].map((off, i) => (
+            <path
+              key={`alt-parallel-${i}`}
+              d={generateSmoothPath(trimSideLine(offsetPolyline(currentWaypoints, off)))}
+              fill="none"
+              {...style}
+              pointerEvents="none"
+            />
+          ));
+        }
+        return null;
+      })()}
+
+      {/* Render negation marker at midpoint perpendicular to path */}
+      {negation && (() => {
+        // Calculate direction at midpoint
+        let angle = 0;
+        if (currentWaypoints.length >= 2) {
+          // Find the segment containing the midpoint
+          let totalLength = 0;
+          const segmentLengths = [];
+          for (let i = 0; i < currentWaypoints.length - 1; i++) {
+        const dx = currentWaypoints[i + 1].x - currentWaypoints[i].x;
+        const dy = currentWaypoints[i + 1].y - currentWaypoints[i].y;
+        const len = Math.hypot(dx, dy);
+        segmentLengths.push(len);
+        totalLength += len;
+          }
+          let midDist = totalLength / 2;
+          let acc = 0;
+          for (let i = 0; i < segmentLengths.length; i++) {
+        if (acc + segmentLengths[i] >= midDist) {
+          // Direction vector of this segment
           const dx = currentWaypoints[i + 1].x - currentWaypoints[i].x;
           const dy = currentWaypoints[i + 1].y - currentWaypoints[i].y;
-          const len = Math.hypot(dx, dy);
-          segmentLengths.push(len);
-          totalLength += len;
-            }
-            let midDist = totalLength / 2;
-            let acc = 0;
-            for (let i = 0; i < segmentLengths.length; i++) {
-          if (acc + segmentLengths[i] >= midDist) {
-            // Direction vector of this segment
-            const dx = currentWaypoints[i + 1].x - currentWaypoints[i].x;
-            const dy = currentWaypoints[i + 1].y - currentWaypoints[i].y;
-            angle = Math.atan2(dy, dx) * 180 / Math.PI + 90; // Perpendicular
-            break;
+          angle = Math.atan2(dy, dx) * 180 / Math.PI + 90; // Perpendicular
+          break;
+        }
+        acc += segmentLengths[i];
           }
-          acc += segmentLengths[i];
-            }
-          }
-          return (
-            <use 
-          href="#midpoint-negation" 
-          x={midPoint.x} 
-          y={midPoint.y}
-          width={20/zoom}
-          height={20/zoom}
-          stroke={style.stroke}
-          transform={`rotate(${angle},${midPoint.x},${midPoint.y})`}
-          pointerEvents="none"
-            />
-          );
-        })()}
+        }
+        return (
+          <use 
+        href="#midpoint-negation" 
+        x={midPoint.x} 
+        y={midPoint.y}
+        width={20/zoom}
+        height={20/zoom}
+        stroke={style.stroke}
+        transform={`rotate(${angle},${midPoint.x},${midPoint.y})`}
+        pointerEvents="none"
+          />
+        );
+      })()}
 
-        {/* Draggable Label */}
+      {/* Draggable Label */}
       <g 
         className="condec-relation-label" 
         cursor={isSelected ? "move" : "pointer"}
