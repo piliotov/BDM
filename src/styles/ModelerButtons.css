@@ -1,0 +1,58 @@
+.modeler-btn {
+  padding: 8px 15px;
+  font-size: 14px;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+  height: 36px;
+  min-width: 80px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, border 0.15s;
+  margin-right: 10px;
+}
+.modeler-btn:last-child {
+  margin-right: 0;
+}
+.modeler-btn:hover, .modeler-btn:focus {
+  background: #f5f5f5;
+  border-color: #1976d2;
+  outline: none;
+}
+.modeler-btn.import {
+  background: #34a853;
+  color: #fff;
+  border: none;
+}
+.modeler-btn.import:hover, .modeler-btn.import:focus {
+  background: #2c8c47;
+  color: #fff;
+}
+.modeler-btn input[type="file"] {
+  display: none;
+}
+
+/* Completely redesigned button container */
+.button-container {
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  background-color: #fff; 
+  border-bottom: 1px solid #e0e0e0;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+/* Make the wrapper content background white to match */
+.modeler-wrapper, .condec-modeler-wrapper {
+  background-color: #fff !important;
+}
+
+/* Reset any ConDec specific button container styles */
+.condec-modeler-wrapper .button-container {
+  margin: 0;
+  padding: 10px 16px;
+  background-color: #fff;
+}

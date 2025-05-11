@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import '../styles/ConDecModeler.css';
+import '../styles/ModelerButtons.css'; // <-- Add this import
 import { ConDecCanvas } from './ConDecCanvas';
 import { ConDecNodeMenu } from './ConDecNodeMenu';
 import { snapNodeDuringDrag, createSvgGrid } from '../utils/gridUtil';
@@ -902,44 +903,22 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
     minHeight: 0,
     minWidth: 0,
     flex:1,
-    ...style,
     position: 'relative',
-    background: '#fafbfc'
+    background: '#fff'  // Change to white
   };
 
   return (
     <div className="condec-modeler-wrapper" style={wrapperStyle}>
-      {/* --- Button bar at the top --- */}
-      <div className="condec-button-bar" style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '12px',
-        background: '#fafbfc',
-        zIndex: 20,
-        padding: '10px 16px',
-        borderBottom: '1px solid #e0e0e0'
-      }}>
+      <div className="button-container">
         <button 
+          className="modeler-btn"
           onClick={() => setDiagram(initialDiagram)} 
           title="New Diagram"
-          style={{
-            padding: '8px 16px',
-            fontSize: '14px',
-            background: '#fff',
-            border: '1px solid #ccc',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            height: '36px',
-            minWidth: '80px',
-            fontWeight: 500,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}
         >
           New
         </button>
         <button 
+          className="modeler-btn"
           onClick={() => {
             // Export as XML
             const xmlString = diagramToXML(diagram);
@@ -951,63 +930,20 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
             link.click();
             URL.revokeObjectURL(url);
           }} 
-          
           title="Export Diagram (XML)"
-          style={{
-            padding: '8px 16px',
-            fontSize: '14px',
-            background: '#fff',
-            border: '1px solid #ccc',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            height: '36px',
-            minWidth: '80px',
-            fontWeight: 500,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}
         >
           Export
         </button>
         <button 
+          className="modeler-btn"
           onClick={handleExportSVG} 
           title="Export SVG"
-          style={{
-            padding: '8px 16px',
-            fontSize: '14px',
-            background: '#fff',
-            border: '1px solid #ccc',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            height: '36px',
-            minWidth: '80px',
-            fontWeight: 500,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}
         >
           Export SVG
         </button>
         <label 
-          className="import-button" 
-          title="Import Diagram (XML)" 
-          style={{ 
-            background: '#43a047', 
-            color: '#fff', 
-            border: 'none', 
-            borderRadius: '4px', 
-            padding: '8px 16px', 
-            fontWeight: 500,
-            height: '36px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            fontSize: '14px',
-            minWidth: '80px'
-          }}
+          className="modeler-btn import"
+          title="Import Diagram (XML)"
         >
           Import
           <input type="file" accept=".xml" onChange={(event) => {
@@ -1043,7 +979,7 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
 
             reader.readAsText(file);
             event.target.value = null;
-          }} style={{ display: 'none' }} />
+          }} />
         </label>
       </div>
       {/* --- Main modeler area --- */}
