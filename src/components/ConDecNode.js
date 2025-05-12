@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { validateNodeConstraint } from '../utils/nodeConstraintUtils'; // <-- Add this import
 
 // --- Node Types and Constraints ---
 export const NODE_TYPES = {
@@ -29,28 +30,27 @@ export function ConDecNode({
   const [editValue, setEditValue] = useState(node.name);
   const inputRef = useRef();
 
-  // Check if the constraint is valid based on incoming relations
+  // Check if the constraint is valid based on actual diagram (not just incomingRelationsCount)
   const isConstraintViolated = () => {
     if (!node.constraint) return false;
-    
+    // Try to use global diagram for validation if available
+    if (window?.condecDiagramForValidation) {
+      const result = validateNodeConstraint(node, window.condecDiagramForValidation);
+      return !result.valid;
+    }
+    // fallback to old logic
     const incomingCount = node.incomingRelationsCount || 0;
-    
     switch(node.constraint) {
       case CONSTRAINTS.ABSENCE:
         return incomingCount > 0;
-      
       case CONSTRAINTS.ABSENCE_N:
         return incomingCount > (node.constraintValue || 0);
-      
       case CONSTRAINTS.EXISTENCE_N:
         return incomingCount < (node.constraintValue || 0);
-      
       case CONSTRAINTS.EXACTLY_N:
         return incomingCount !== (node.constraintValue || 0);
-      
       case CONSTRAINTS.INIT:
         return incomingCount > 0;
-      
       default:
         return false;
     }
@@ -145,8 +145,8 @@ export function ConDecNode({
         rx="5"
         ry="5"
         fill={constraintViolated ? "#ffebee" : "#f5f5f5"}
-        stroke={isSelected ? '#1a73e8' : constraintViolated ? '#d32f2f' : '#000'}
-        strokeWidth={isSelected ? 2.5 : constraintViolated ? 2 : 1.5}
+        stroke={constraintViolated ? '#d32f2f' : (isSelected ? '#1a73e8' : '#000')}
+        strokeWidth={constraintViolated ? 2.5 : (isSelected ? 2.5 : 1.5)}
         fillOpacity={0.95}
         style={{ cursor: mode === 'addRelation' ? 'crosshair' : 'pointer' }}
       />
@@ -229,7 +229,11 @@ export function ConDecNode({
           dominantBaseline="central"
           fontSize="12px"
           pointerEvents="none"
-          style={{ userSelect: 'none' }}
+          style={{
+            userSelect: 'none',
+            fill: constraintViolated ? '#d32f2f' : '#222',
+            fontWeight: constraintViolated ? 'bold' : 'normal'
+          }}
         >
           {node.name}
         </text>

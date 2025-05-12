@@ -1,7 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { ConDecRelation } from './ConDecRelations';
 import { ConDecNode } from './ConDecNode';
-import { ConDecNodeMenu } from './ConDecNodeMenu';
 import { calculateIntersectionPoint } from '../utils/geometryUtils';
 import { useCanvasPanning } from '../utils/canvasUtils';
 import { updateRelationsForNode } from '../utils/relationUtils';
@@ -171,25 +170,6 @@ export function ConDecCanvas({
             onRename={name => onNodeRename(node.id, name)}
             onRenameBlur={() => {}}
           />
-          {isSelected && (
-            <ConDecNodeMenu
-              node={node}
-              onEdit={(n, evt) => {
-                if (onNodeMenuEdit) onNodeMenuEdit(n);
-              }}
-              onDelete={onNodeMenuDelete}
-              onAppend={onAppend ? () => onAppend(node) : undefined}
-              onClose={onNodeMenuClose}
-              zoom={zoom}
-              onTypeChange={type => {
-                // Update node type and apply immediately
-                const updatedNodes = diagram.nodes.map(n =>
-                  n.id === node.id ? { ...n, type } : n
-                );
-                if (typeof onNodeEdit === 'function') onNodeEdit(updatedNodes);
-              }}
-            />
-          )}
         </React.Fragment>
       );
     });

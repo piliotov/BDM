@@ -8,6 +8,8 @@ import { isRelationAllowed, RELATION_TYPES } from '../utils/relationUtils';
 import { addNode, handleNodeRename as utilHandleNodeRename } from '../utils/nodeUtils';
 import { appendActivityAndConnect } from '../utils/append-action';
 import RelationEditMenu from './RelationEditMenu';
+import { ConDecNodeMenu } from './FloatingNodeMenu'; // Fix import
+import { NodeEditMenu } from './NodeEditMenu'; // Fix import
 
 // Constants for local storage
 const LOCAL_STORAGE_KEY = 'condec-diagram';
@@ -38,6 +40,119 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
 
   // Ref for node edit popup to detect outside clicks
   const nodeEditPopupRef = useRef(null);
+
+  // Ensure the modeler always fills its parent or viewport if used standalone
+  const wrapperStyle = {
+    width: '100%',
+    height: '100%',
+    display: 'flex',
+    flexDirection: 'column',
+    minHeight: 0,
+    minWidth: 0,
+    flex: 1,
+    position: 'relative',
+    background: '#fff'  // Change to white
+  };
+
+  // Set global for constraint validation in NodeEditMenu and ConDecNode
+  useEffect(() => {
+    window.condecDiagramForValidation = diagram;
+    return () => { window.condecDiagramForValidation = undefined; };
+  }, [diagram]);
+
+  // Render palette (icon-only, vertical, left side)
+  const renderPalette = () => (
+    <div className="condec-palette condec-palette-left" style={{
+      position: 'absolute',
+      left: '10px',
+      top: '20%',
+      transform: 'translateY(-50%)',
+      background: '#f5f5f5',
+      border: '1px solid #e0e0e0',
+      borderRadius: '4px',
+      boxShadow: '0 1px 4px rgba(0,0,0,0.1)',
+      zIndex: 10
+    }}>
+      <div className="palette-group" style={{
+        display: 'flex',
+        flexDirection: 'column',
+        padding: '6px'
+      }}>
+        {/* Hand Tool */}
+        <div
+          className={`palette-entry ${mode === 'hand' ? 'active' : ''}`}
+          onClick={() => setMode('hand')}
+          title="Hand Tool (H)"
+          style={{
+            cursor: 'pointer',
+            padding: '8px',
+            margin: '2px 0',
+            borderRadius: '4px',
+            background: mode === 'hand' ? '#e3f2fd' : 'transparent',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center'
+          }}
+        >
+          <svg width="30" height="30" viewBox="0 0 2000 2000" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="2000" height="2000" rx="8" fill="none"/><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2000 2000" fill="#000000" x="0" y="0" width="2000" height="2000"><path fill="none" stroke="#000000" strokeWidth="67.5" d="M806.673 1750.205h621.961c22.031-70.25 62.033-342.206 146.35-560.816c109.703-284.426 222.535-533.47 79.188-558.11c-114.053-22.16-164.268 222.17-239.25 378.398c0 0-.735-152.653-1.608-319.073c-.925-176.455 20.91-388.517-71.236-381.548c-95.054-6.969-102.434 176.632-127.533 313.704C1187.657 769.598 1163 921.667 1163 921.667s-25.608-129.884-43.734-309.888c-16.45-163.37-23.671-382.574-120.066-378.476c-114.205-4.098-91.583 212.301-89.508 386.42c1.627 136.477-3.108 300.727-3.108 300.727s-61.033-149.246-92.487-232.773c-62.058-160.334-116.378-320.83-230.62-269.78c-101.186 47.595-9.532 225.224 39.893 407.56c43.362 159.965 86.72 332.892 86.72 332.892s-293.095-367.544-429.6-246.644c-120.896 113.1 66.75 220.16 245.33 434.345c101.267 121.459 208.574 310.194 280.852 404.155z"/></svg></svg>
+        </div>
+        {/* Select Tool */}
+        <div
+          className={`palette-entry ${mode === 'select' ? 'active' : ''}`}
+          onClick={() => setMode('select')}
+          title="Select Tool (S)"
+          style={{
+            cursor: 'pointer',
+            padding: '8px',
+            margin: '2px 0',
+            borderRadius: '4px',
+            background: mode === 'select' ? '#e3f2fd' : 'transparent',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center'
+          }}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 2000 2000"><g fill="none" stroke="currentColor"><path strokeLinejoin="round" strokeWidth="205.238" d="M1304.97 699.019H868.856"/><path strokeWidth="80" d="M1566.732 696.368h285.2v273.246m.001 592.034v273.247h-277.985m277.304-652.426v153.246m-1140.123 228.21v273.247h277.984m209.817 0h165.201"/><path strokeLinejoin="round" strokeWidth="205.238" d="M708.49 104.8v436.115m0 323.815v436.114M545.042 699.019H108.927"/></g></svg>
+        </div>
+        {/* Add Relation Tool - Arrow Icon */}
+        <div
+          className={`palette-entry ${mode === 'addRelation' ? 'active' : ''}`}
+          onClick={() => setMode('addRelation')}
+          title="Add Relation"
+          style={{
+            cursor: 'pointer',
+            padding: '8px',
+            margin: '2px 0',
+            borderRadius: '4px',
+            background: mode === 'addRelation' ? '#e3f2fd' : 'transparent',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center'
+          }}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 2048 2048"><path fill="currentColor" d="M1866.407 206.692s-585.454 298.724-882.844 438.406c63.707 58.178 122.963 120.927 184.437 181.407c-302.353 306.387-604.71 612.769-907.062 919.156c22.172 21.16 44.327 42.309 66.5 63.469c302.352-306.388 604.71-612.738 907.062-919.125c61.588 61.37 122.828 123.086 184.438 184.437c158.845-312.83 447.469-867.75 447.469-867.75z"/></svg>
+        </div>
+        {/* Add Activity Tool - Box Icon */}
+        <div
+          className={`palette-entry ${mode === 'addActivity' ? 'active' : ''}`}
+          onClick={() => setMode('addActivity')}
+          title="Add Activity"
+          style={{
+            cursor: 'pointer',
+            padding: '8px',
+            margin: '2px 0',
+            borderRadius: '4px',
+            background: mode === 'addActivity' ? '#e3f2fd' : 'transparent',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center'
+          }}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 2048 2048"><rect width="17.563" height="14.478" x="1.23" y="1035.052" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.034" rx="2.759" transform="translate(55.328 -99820.702) scale(96.7529)"/></svg>
+        </div>
+      </div>
+    </div>
+  );
 
   // Update canvas size and center offset when window resizes
   useEffect(() => {
@@ -523,357 +638,11 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
   };
 
   // --- Unified Edit Popup for Node and Relation ---
-  // Handle outside click for node edit popup (must be at top level, not inside renderEditPopup)
-  useEffect(() => {
-    if (!editNodePopup) return;
-    function handleClickOutside(e) {
-      const popup = nodeEditPopupRef.current;
-      if (popup && !popup.contains(e.target)) {
-        setEditNodePopup(null);
-        setEditNodePopupPos({ x: null, y: null });
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside, true);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside, true);
-    };
-  }, [editNodePopup]);
+  // Remove old renderEditPopup and outside click for node edit popup
 
-  // Renders the unified edit popup for node or relation
-  const renderEditPopup = () => {
-    if (editNodePopup) {
-      const node = editNodePopup.node;
-      // Try to position below the node menu, but keep fully in viewport
-      let left = editNodePopupPos.x !== null ? editNodePopupPos.x : null;
-      let top = editNodePopupPos.y !== null ? editNodePopupPos.y : null;
-      let transform = undefined;
-
-      // If no explicit position, compute below the node
-      if (left === null && top === null && node) {
-        // Get canvas container and SVG for coordinate conversion
-        const canvasContainer = document.querySelector('.condec-canvas-container');
-        const svg = document.querySelector('.condec-canvas');
-        if (canvasContainer && svg && svg.viewBox && svg.viewBox.baseVal && svg.viewBox.baseVal.width) {
-          const containerRect = canvasContainer.getBoundingClientRect();
-          // Node center in SVG coordinates
-          const nodeX = node.x;
-          const nodeY = node.y;
-          // Get zoom and offset
-          const zoom = svg.width.baseVal.value / svg.viewBox.baseVal.width || 1;
-          // Canvas offset (centered)
-          const offsetX = containerRect.left + containerRect.width / 2;
-          const offsetY = containerRect.top + containerRect.height / 2;
-          // Node position in screen coordinates
-          const screenX = offsetX + nodeX * zoom;
-          const screenY = offsetY + nodeY * zoom;
-          // Place popup below node menu (node menu is above node)
-          left = screenX + 60; // 60px to the right of node (menu is right of node)
-          top = screenY - 25;  // node menu is above node, so align top
-          // Default popup size
-          const popupWidth = 320;
-          const popupHeight = 260;
-          // Clamp to viewport
-          const viewportWidth = window.innerWidth;
-          const viewportHeight = window.innerHeight;
-          if (left + popupWidth > viewportWidth - 10) left = viewportWidth - popupWidth - 10;
-          if (left < 10) left = 10;
-          if (top + popupHeight > viewportHeight - 10) top = viewportHeight - popupHeight - 10;
-          if (top < 10) top = 10;
-          transform = undefined;
-        } else {
-          // fallback: center
-          left = '50%';
-          top = '50%';
-          transform = 'translate(-50%, -50%)';
-        }
-      } else if (left === null || top === null) {
-        // fallback: center
-        left = '50%';
-        top = '50%';
-        transform = 'translate(-50%, -50%)';
-      }
-
-      const popupStyle = {
-        position: 'fixed',
-        left,
-        top,
-        transform,
-        zIndex: 2000,
-        background: '#fff',
-        border: '1.5px solid #1976d2',
-        borderRadius: 8,
-        boxShadow: '0 4px 24px rgba(0,0,0,0.18)',
-        minWidth: 260,
-        maxWidth: 320,
-        padding: 16,
-        width: 280,
-        cursor: draggingEditPopup ? 'move' : 'default',
-        userSelect: draggingEditPopup ? 'none' : 'auto'
-      };
-      return (
-        <div
-          className="condec-edit-node-popup"
-          style={popupStyle}
-          ref={nodeEditPopupRef}
-        >
-          <div
-            className="condec-edit-node-popup-header"
-            style={{
-              fontWeight: 600,
-              fontSize: 16,
-              color: '#1976d2',
-              marginBottom: 12,
-              cursor: 'move',
-              userSelect: 'none'
-            }}
-            onMouseDown={e => {
-              const rect = e.currentTarget.parentNode.getBoundingClientRect();
-              setDragOffset({
-                x: e.clientX - rect.left,
-                y: e.clientY - rect.top
-              });
-              setDraggingEditPopup(true);
-            }}
-          >
-            <span role="img" aria-label="wrench" style={{marginRight:8}}>🔧</span>
-            Edit Node
-          </div>
-          <div className="property-group">
-            <label>Name:</label>
-            <input
-              type="text"
-              value={node.name}
-              onChange={e => {
-                const newName = e.target.value;
-                setEditNodePopup(prev => ({
-                  ...prev,
-                  node: { ...prev.node, name: newName }
-                }));
-                // Save immediately
-                saveToUndoStack();
-                setDiagram(diagram => ({
-                  ...diagram,
-                  nodes: diagram.nodes.map(n =>
-                    n.id === node.id ? { ...node, name: newName } : n
-                  )
-                }));
-                setSelectedElement({ type: 'node', element: { ...node, name: newName } });
-              }}
-            />
-          </div>
-          <div className="property-group">
-            <label>Constraint:</label>
-            <select
-              value={node.constraint || ''}
-              onChange={e => {
-                const newConstraint = e.target.value || null;
-                setEditNodePopup(prev => ({
-                  ...prev,
-                  node: { ...prev.node, constraint: newConstraint }
-                }));
-                // Save immediately
-                saveToUndoStack();
-                setDiagram(diagram => ({
-                  ...diagram,
-                  nodes: diagram.nodes.map(n =>
-                    n.id === node.id ? { ...node, constraint: newConstraint } : n
-                  )
-                }));
-                setSelectedElement({ type: 'node', element: { ...node, constraint: newConstraint } });
-              }}
-            >
-              <option value="">None</option>
-              <option value={CONSTRAINTS.ABSENCE}>Absence (0)</option>
-              <option value={CONSTRAINTS.ABSENCE_N}>Absence (0..n)</option>
-              <option value={CONSTRAINTS.EXISTENCE_N}>Existence (n..*)</option>
-              <option value={CONSTRAINTS.EXACTLY_N}>Exactly (n)</option>
-              <option value={CONSTRAINTS.INIT}>Init</option>
-            </select>
-          </div>
-          {(node.constraint === CONSTRAINTS.ABSENCE_N ||
-            node.constraint === CONSTRAINTS.EXISTENCE_N ||
-            node.constraint === CONSTRAINTS.EXACTLY_N) && (
-            <div className="property-group">
-              <label>Constraint Value (n):</label>
-              <input
-                type="number"
-                min="1"
-                value={node.constraintValue || 1}
-                onChange={e => {
-                  const newValue = parseInt(e.target.value) || 1;
-                  setEditNodePopup(prev => ({
-                    ...prev,
-                    node: { ...prev.node, constraintValue: newValue }
-                  }));
-                  // Save immediately
-                  saveToUndoStack();
-                  setDiagram(diagram => ({
-                    ...diagram,
-                    nodes: diagram.nodes.map(n =>
-                      n.id === node.id ? { ...node, constraintValue: newValue } : n
-                    )
-                  }));
-                  setSelectedElement({ type: 'node', element: { ...node, constraintValue: newValue } });
-                }}
-              />
-            </div>
-          )}
-          <div style={{display:'flex',gap:12,marginTop:18}}>
-            <button
-              style={{
-                flex: 1,
-                background: '#d32f2f',
-                color: '#fff',
-                border: 'none',
-                borderRadius: 4,
-                padding: '8px 0',
-                fontWeight: 600
-              }}
-              onClick={() => {
-                saveToUndoStack();
-                setDiagram(diagram => ({
-                  ...diagram,
-                  nodes: diagram.nodes.filter(n => n.id !== node.id),
-                  relations: diagram.relations.filter(r => r.sourceId !== node.id && r.targetId !== node.id)
-                }));
-                setEditNodePopup(null);
-                setEditNodePopupPos({ x: null, y: null });
-                setSelectedElement(null);
-              }}
-            >Delete</button>
-            <button
-              style={{flex:1,background:'#eee',color:'#333',border:'none',borderRadius:4,padding:'8px 0'}}
-              onClick={() => {
-                setEditNodePopup(null);
-                setEditNodePopupPos({ x: null, y: null });
-              }}
-            >Close</button>
-          </div>
-        </div>
-      );
-    }
-
-    // Relation Edit: now handled as a sidebar, not a popup
-    return null;
-  };
-
-  // Render palette (icon-only, vertical, left side)
-  const renderPalette = () => {
-    return (
-      <div className="condec-palette condec-palette-left" style={{
-        position: 'absolute',
-        left: '10px',
-        top: '20%',
-        transform: 'translateY(-50%)',
-        background: '#f5f5f5',
-        border: '1px solid #e0e0e0',
-        borderRadius: '4px',
-        boxShadow: '0 1px 4px rgba(0,0,0,0.1)',
-        zIndex: 10
-      }}>
-        <div className="palette-group" style={{
-          display: 'flex',
-          flexDirection: 'column',
-          padding: '6px'
-        }}>
-          {/* Hand Tool */}
-          <div
-            className={`palette-entry ${mode === 'hand' ? 'active' : ''}`}
-            onClick={() => setMode('hand')}
-            title="Hand Tool (H)"
-            style={{
-              cursor: 'pointer',
-              padding: '8px',
-              margin: '2px 0',
-              borderRadius: '4px',
-              background: mode === 'hand' ? '#e3f2fd' : 'transparent',
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center'
-            }}
-            >
-
-            <svg width="30" height="30" viewBox="0 0 2000 2000" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="2000" height="2000" rx="8" fill="none"/><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2000 2000" fill="#000000" x="0" y="0" width="2000" height="2000"><path fill="none" stroke="#000000" stroke-width="67.5" d="M806.673 1750.205h621.961c22.031-70.25 62.033-342.206 146.35-560.816c109.703-284.426 222.535-533.47 79.188-558.11c-114.053-22.16-164.268 222.17-239.25 378.398c0 0-.735-152.653-1.608-319.073c-.925-176.455 20.91-388.517-71.236-381.548c-95.054-6.969-102.434 176.632-127.533 313.704C1187.657 769.598 1163 921.667 1163 921.667s-25.608-129.884-43.734-309.888c-16.45-163.37-23.671-382.574-120.066-378.476c-114.205-4.098-91.583 212.301-89.508 386.42c1.627 136.477-3.108 300.727-3.108 300.727s-61.033-149.246-92.487-232.773c-62.058-160.334-116.378-320.83-230.62-269.78c-101.186 47.595-9.532 225.224 39.893 407.56c43.362 159.965 86.72 332.892 86.72 332.892s-293.095-367.544-429.6-246.644c-120.896 113.1 66.75 220.16 245.33 434.345c101.267 121.459 208.574 310.194 280.852 404.155z"/></svg></svg>
-          </div>
-
-          {/* Select Tool */}
-          <div
-            className={`palette-entry ${mode === 'select' ? 'active' : ''}`}
-            onClick={() => setMode('select')}
-            title="Select Tool (S)"
-            style={{
-              cursor: 'pointer',
-              padding: '8px',
-              margin: '2px 0',
-              borderRadius: '4px',
-              background: mode === 'select' ? '#e3f2fd' : 'transparent',
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center'
-            }}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 2000 2000"><g fill="none" stroke="currentColor"><path stroke-linejoin="round" stroke-width="205.238" d="M1304.97 699.019H868.856"/><path stroke-width="80" d="M1566.732 696.368h285.2v273.246m.001 592.034v273.247h-277.985m277.304-652.426v153.246m-1140.123 228.21v273.247h277.984m209.817 0h165.201"/><path stroke-linejoin="round" stroke-width="205.238" d="M708.49 104.8v436.115m0 323.815v436.114M545.042 699.019H108.927"/></g></svg>
-          </div>
-          
-          {/* Add Relation Tool - Arrow Icon */}
-          <div
-            className={`palette-entry ${mode === 'addRelation' ? 'active' : ''}`}
-            onClick={() => setMode('addRelation')}
-            title="Add Relation"
-            style={{
-              cursor: 'pointer',
-              padding: '8px',
-              margin: '2px 0',
-              borderRadius: '4px',
-              background: mode === 'addRelation' ? '#e3f2fd' : 'transparent',
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center'
-            }}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 2048 2048"><path fill="currentColor" d="M1866.407 206.692s-585.454 298.724-882.844 438.406c63.707 58.178 122.963 120.927 184.437 181.407c-302.353 306.387-604.71 612.769-907.062 919.156c22.172 21.16 44.327 42.309 66.5 63.469c302.352-306.388 604.71-612.738 907.062-919.125c61.588 61.37 122.828 123.086 184.438 184.437c158.845-312.83 447.469-867.75 447.469-867.75z"/></svg>
-          </div>
-          
-          {/* Add Activity Tool - Box Icon */}
-          <div
-            className={`palette-entry ${mode === 'addActivity' ? 'active' : ''}`}
-            onClick={() => setMode('addActivity')}
-            title="Add Activity"
-            style={{
-              cursor: 'pointer',
-              padding: '8px',
-              margin: '2px 0',
-              borderRadius: '4px',
-              background: mode === 'addActivity' ? '#e3f2fd' : 'transparent',
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center'
-            }}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 2048 2048"><rect width="17.563" height="14.478" x="1.23" y="1035.052" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.034" rx="2.759" transform="translate(55.328 -99820.702) scale(96.7529)"/></svg>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // If diagram is not loaded yet, show loading
-  if (!diagram) {
-    return <div>Loading ConDec Modeler...</div>;
-  }
-
-  // Ensure the modeler always fills its parent or viewport if used standalone
-  const wrapperStyle = {
-    width: '100%',
-    height: '100%',
-    display: 'flex',
-    flexDirection: 'column',
-    minHeight: 0,
-    minWidth: 0,
-    flex:1,
-    position: 'relative',
-    background: '#fff'  // Change to white
-  };
+  // --- Render floating node menu and node edit popup ---
+  // Always render FloatingNodeMenu for selected node (unless multi-select or relation selected)
+  // Render NodeEditMenu only if editNodePopup is set
 
   return (
     <div className="condec-modeler-wrapper" style={wrapperStyle}>
@@ -1001,8 +770,45 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
           onNodeDrag={handleNodeDrag}
           onAppend={handleAppendActivity}
         />
-        {/* Show node edit popup if editing a node */}
-        {renderEditPopup()}
+        {/* --- Render floating node menu for selected node --- */}
+        {selectedElement && selectedElement.type === 'node' && !selectedElement.multiSelect && (
+          <div
+            style={{
+              position: 'absolute',
+              left: `${selectedElement.element.x * zoom + canvasOffset.x + 60}px`,
+              top: `${selectedElement.element.y * zoom + canvasOffset.y - 11}px`,
+              pointerEvents: 'auto',
+              zIndex: 2000
+            }}
+          >
+            <ConDecNodeMenu
+              node={selectedElement.element}
+              diagram={diagram}
+              onEdit={(node) => {
+                setEditNodePopup({ node: { ...node } });
+                setEditNodePopupPos({ x: null, y: null });
+              }}
+              onDelete={handleDelete}
+              onAppend={handleAppendActivity}
+              onClose={() => setSelectedElement(null)}
+              zoom={zoom}
+            />
+          </div>
+        )}
+        {/* --- Render node edit popup if editing a node --- */}
+        {editNodePopup && (
+          <NodeEditMenu
+            node={editNodePopup.node}
+            editNodePopupPos={editNodePopupPos}
+            setDragOffset={setDragOffset}
+            setDraggingEditPopup={setDraggingEditPopup}
+            setEditNodePopup={setEditNodePopup}
+            setEditNodePopupPos={setEditNodePopupPos}
+            setDiagram={setDiagram}
+            saveToUndoStack={saveToUndoStack}
+            setSelectedElement={setSelectedElement}
+          />
+        )}
         {/* Show relation edit sidebar if a relation is selected */}
         {selectedElement && selectedElement.type === 'relation' && (
           <RelationEditMenu

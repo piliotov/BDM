@@ -63,7 +63,7 @@ function validateNodeConstraints(node, diagram = { relations: [] }) {
 // --- Main Node Menu (without wrench button and type menu) ---
 export function ConDecNodeMenu({
   node,
-  diagram = { relations: [] }, // Ensure diagram has a default value
+  diagram = { relations: [] },
   onEdit,
   onDelete,
   onAppend,
@@ -72,15 +72,15 @@ export function ConDecNodeMenu({
 }) {
   if (!node) return null;
 
-  const validation = validateNodeConstraints(node, diagram);
+  // Remove error message and text, keep only buttons
+  const actions = Object.entries(ACTION_ICONS);
 
+  const ICON_SIZE = 22;
   const nodeWidth = 100;
   const nodeHeight = 50;
   const pad = 8 / zoom;
   const baseX = node.x + nodeWidth / 2 + pad;
   const baseY = node.y - nodeHeight / 2 - pad;
-
-  const actions = Object.entries(ACTION_ICONS);
 
   const btnClass = "condec-context-btn";
   const btnStyle = {
@@ -89,8 +89,8 @@ export function ConDecNodeMenu({
     justifyContent: 'center',
     width: `${ICON_SIZE}px`,
     height: `${ICON_SIZE}px`,
-    background: validation.valid ? '#fff' : '#ffebee',
-    border: validation.valid ? '1px solid transparent' : '1px solid #d32f2f',
+    background: '#fff',
+    border: '1px solid transparent',
     margin: '0 2px',
     cursor: 'pointer',
     transition: 'none',
@@ -113,22 +113,7 @@ export function ConDecNodeMenu({
         transform={`translate(${baseX},${baseY}) scale(${1/zoom})`}
       >
         <foreignObject x={0} y={0} width={ICON_SIZE * 4 + 32} height={ICON_SIZE + 4}>
-          <div style={{ display: 'flex', gap: 4, background: 'none', pointerEvents: 'all' }}>
-            {validation.valid ? null : (
-              <div
-                style={{
-                  color: '#d32f2f',
-                  fontSize: '14px',
-                  fontWeight: 'bold',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px'
-                }}
-              >
-                <span>⚠️</span>
-                <span>{validation.message}</span>
-              </div>
-            )}
+          <div style={{ display: 'flex', gap: 4, background: 'none', pointerEvents: 'all', alignItems: 'center' }}>
             {actions.map(([key, action]) => (
               <button
                 key={key}

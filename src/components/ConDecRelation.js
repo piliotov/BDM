@@ -16,6 +16,8 @@ export function ConDecRelation({
   const [currentWaypoints, setCurrentWaypoints] = useState([]);
   const [isDragging, setIsDragging] = useState(false);
   const [draggedPoint, setDraggedPoint] = useState(null);
+  const [isLabelDragging, setIsLabelDragging] = useState(false);
+  const [labelDragOffset, setLabelDragOffset] = useState({ x: 0, y: 0 });
   
   // For displaying label in center of path
   const midIndex = Math.floor((currentWaypoints?.length || 0) / 2);
@@ -187,6 +189,66 @@ export function ConDecRelation({
     };
   }, [isDragging, draggedPoint, currentWaypoints, relation, onWaypointDrag, onWaypointDragEnd, canvasOffset, zoom]);
 
+  // --- Make relation label draggable ---
+  // Mouse down on label to start dragging
+  const handleLabelMouseDown = (e) => {
+    if (!isSelected) return;
+    e.stopPropagation();
+    setIsLabelDragging(true);
+    // Calculate offset between mouse and label center
+    setLabelDragOffset({
+      x: e.clientX - (midPoint.x * zoom + canvasOffset.x),
+      y: e.clientY - (midPoint.y * zoom + canvasOffset.y)
+    });
+    saveToUndoStack && saveToUndoStack();
+  };
+
+  // Drag label: move all waypoints by delta
+  useEffect(() => {
+    if (!isLabelDragging) return;
+    const handleMouseMove = (e) => {
+      // Calculate new label center in canvas coordinates
+      const svg = document.querySelector('svg.condec-canvas');
+      if (!svg) return;
+      const rect = svg.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+      // Convert to diagram coordinates
+      const newLabelX = (mouseX - canvasOffset.x) / zoom;
+      const newLabelY = (mouseY - canvasOffset.y) / zoom;
+      // Calculate delta from current label position
+      const dx = newLabelX - midPoint.x;
+      const dy = newLabelY - midPoint.y;
+      // Move all waypoints by delta
+      const newWaypoints = currentWaypoints.map(pt => ({
+        x: pt.x + dx,
+        y: pt.y + dy
+      }));
+      setCurrentWaypoints(newWaypoints);
+      // Notify parent
+      if (onWaypointDrag) {
+        const updatedRelation = {
+          ...relation,
+          waypoints: newWaypoints
+        };
+        onWaypointDrag(relation.id, newWaypoints, [updatedRelation]);
+      }
+    };
+    const handleMouseUp = () => {
+      setIsLabelDragging(false);
+      setLabelDragOffset({ x: 0, y: 0 });
+      if (onWaypointDragEnd) {
+        onWaypointDragEnd(relation.id, true);
+      }
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isLabelDragging, midPoint, currentWaypoints, relation, onWaypointDrag, onWaypointDragEnd, canvasOffset, zoom]);
+
   // Helper to handle relation click
   const handleRelationClick = (e) => {
     e.stopPropagation();
@@ -273,7 +335,9 @@ export function ConDecRelation({
       <g 
         className="condec-relation-label" 
         transform={`translate(${midPoint.x},${midPoint.y})`}
-        pointerEvents="none" // Don't capture events, let them pass through
+        pointerEvents="all"
+        style={{ cursor: isSelected ? 'move' : 'default' }}
+        onMouseDown={handleLabelMouseDown}
       >
         {/* Background rect for the label */}
         <rect

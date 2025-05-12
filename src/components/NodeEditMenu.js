@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { CONSTRAINTS } from './ConDecNode';
+import { validateNodeConstraint } from '../utils/nodeConstraintUtils'; // <-- Add this import
 
 // Configuration for constraint types with their descriptions
 const CONSTRAINT_CONFIG = {
@@ -88,41 +89,11 @@ export function NodeEditMenu({
     });
   };
 
-  // Get constraint validation status
+  // Get constraint validation status (use utility for actual diagram check)
   const getConstraintStatus = () => {
-    const currentConstraint = formValues.constraint === 'none' ? null : formValues.constraint;
-    if (!currentConstraint) return null;
-    
-    // Calculate incoming relations count
-    const incomingCount = node.incomingRelationsCount || 0;
-    
-    switch (currentConstraint) {
-      case CONSTRAINTS.ABSENCE:
-        return incomingCount > 0 ? { valid: false, message: 'Must have no incoming relations' } : { valid: true };
-      
-      case CONSTRAINTS.ABSENCE_N:
-        return incomingCount > (formValues.constraintValue || 0) ? 
-          { valid: false, message: `Exceeds max ${formValues.constraintValue} incoming relations` } : 
-          { valid: true };
-      
-      case CONSTRAINTS.EXISTENCE_N:
-        return incomingCount < (formValues.constraintValue || 0) ? 
-          { valid: false, message: `Needs at least ${formValues.constraintValue} incoming relations` } : 
-          { valid: true };
-      
-      case CONSTRAINTS.EXACTLY_N:
-        return incomingCount !== (formValues.constraintValue || 0) ? 
-          { valid: false, message: `Must have exactly ${formValues.constraintValue} incoming relations` } : 
-          { valid: true };
-      
-      case CONSTRAINTS.INIT:
-        return incomingCount > 0 ? 
-          { valid: false, message: 'Init activities cannot have incoming relations' } : 
-          { valid: true };
-      
-      default:
-        return { valid: true };
-    }
+    if (!node || !node.id || !window?.condecDiagramForValidation) return { valid: true };
+    const diagram = window.condecDiagramForValidation;
+    return validateNodeConstraint(node, diagram);
   };
 
   const constraintStatus = getConstraintStatus();
@@ -174,7 +145,7 @@ export function NodeEditMenu({
             : undefined,
         zIndex: 3000,
         background: '#fff',
-        border: '1.5px solid #1976d2',
+        border: constraintStatus && !constraintStatus.valid ? '2px solid #d32f2f' : '1.5px solid #1976d2',
         borderRadius: 8,
         boxShadow: '0 4px 24px rgba(0,0,0,0.18)',
         minWidth: 320,
@@ -193,7 +164,10 @@ export function NodeEditMenu({
           color: '#1976d2',
           marginBottom: 16,
           cursor: 'move',
-          userSelect: 'none'
+          userSelect: 'none',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8
         }}
         onMouseDown={e => {
           const rect = e.currentTarget.parentNode.getBoundingClientRect();
@@ -206,6 +180,9 @@ export function NodeEditMenu({
       >
         <span role="img" aria-label="wrench" style={{marginRight:8}}>🔧</span>
         Edit Activity Node
+        {constraintStatus && !constraintStatus.valid && (
+          <span title="Constraint violated" style={{ color: '#d32f2f', fontSize: 20, marginLeft: 8 }}>❗</span>
+        )}
       </div>
       
       {/* Form fields */}
@@ -220,7 +197,8 @@ export function NodeEditMenu({
             padding: '8px',
             borderRadius: 4,
             border: '1px solid #ccc',
-            fontSize: 14
+            fontSize: 14,
+            background: constraintStatus && !constraintStatus.valid ? '#ffebee' : '#fff'
           }}
         />
       </div>
@@ -235,7 +213,8 @@ export function NodeEditMenu({
             padding: '8px',
             borderRadius: 4,
             border: '1px solid #ccc',
-            fontSize: 14
+            fontSize: 14,
+            background: constraintStatus && !constraintStatus.valid ? '#ffebee' : '#fff'
           }}
         >
           <option value="none">None</option>
@@ -262,7 +241,8 @@ export function NodeEditMenu({
               padding: '8px',
               borderRadius: 4,
               border: '1px solid #ccc',
-              fontSize: 14
+              fontSize: 14,
+              background: constraintStatus && !constraintStatus.valid ? '#ffebee' : '#fff'
             }}
           />
         </div>
