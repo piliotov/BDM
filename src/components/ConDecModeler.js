@@ -1,13 +1,13 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import '../styles/ConDecModeler.css';
 import '../styles/ModelerButtons.css'; // <-- Add this import
 import { ConDecCanvas } from './ConDecCanvas';
-import { ConDecNodeMenu } from './ConDecNodeMenu';
-import { snapNodeDuringDrag, createSvgGrid } from '../utils/gridUtil';
+import { snapNodeDuringDrag } from '../utils/gridUtil';
 import { initialDiagram, diagramToXML, CONSTRAINTS, xmlToDiagram } from '../utils/diagramUtils';
 import { isRelationAllowed, RELATION_TYPES } from '../utils/relationUtils';
 import { addNode, handleNodeRename as utilHandleNodeRename } from '../utils/nodeUtils';
 import { appendActivityAndConnect } from '../utils/append-action';
+import RelationEditMenu from './RelationEditMenu';
 
 // Constants for local storage
 const LOCAL_STORAGE_KEY = 'condec-diagram';
@@ -35,6 +35,9 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
   
   // Calculate the center offset based on window size
   const [canvasOffset, setCanvasOffset] = useState({ x: 0, y: 0 });
+
+  // Ref for node edit popup to detect outside clicks
+  const nodeEditPopupRef = useRef(null);
 
   // Update canvas size and center offset when window resizes
   useEffect(() => {
@@ -520,20 +523,81 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
   };
 
   // --- Unified Edit Popup for Node and Relation ---
+  // Handle outside click for node edit popup (must be at top level, not inside renderEditPopup)
+  useEffect(() => {
+    if (!editNodePopup) return;
+    function handleClickOutside(e) {
+      const popup = nodeEditPopupRef.current;
+      if (popup && !popup.contains(e.target)) {
+        setEditNodePopup(null);
+        setEditNodePopupPos({ x: null, y: null });
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside, true);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside, true);
+    };
+  }, [editNodePopup]);
 
   // Renders the unified edit popup for node or relation
   const renderEditPopup = () => {
-    // Node Edit
     if (editNodePopup) {
       const node = editNodePopup.node;
+      // Try to position below the node menu, but keep fully in viewport
+      let left = editNodePopupPos.x !== null ? editNodePopupPos.x : null;
+      let top = editNodePopupPos.y !== null ? editNodePopupPos.y : null;
+      let transform = undefined;
+
+      // If no explicit position, compute below the node
+      if (left === null && top === null && node) {
+        // Get canvas container and SVG for coordinate conversion
+        const canvasContainer = document.querySelector('.condec-canvas-container');
+        const svg = document.querySelector('.condec-canvas');
+        if (canvasContainer && svg && svg.viewBox && svg.viewBox.baseVal && svg.viewBox.baseVal.width) {
+          const containerRect = canvasContainer.getBoundingClientRect();
+          // Node center in SVG coordinates
+          const nodeX = node.x;
+          const nodeY = node.y;
+          // Get zoom and offset
+          const zoom = svg.width.baseVal.value / svg.viewBox.baseVal.width || 1;
+          // Canvas offset (centered)
+          const offsetX = containerRect.left + containerRect.width / 2;
+          const offsetY = containerRect.top + containerRect.height / 2;
+          // Node position in screen coordinates
+          const screenX = offsetX + nodeX * zoom;
+          const screenY = offsetY + nodeY * zoom;
+          // Place popup below node menu (node menu is above node)
+          left = screenX + 60; // 60px to the right of node (menu is right of node)
+          top = screenY - 25;  // node menu is above node, so align top
+          // Default popup size
+          const popupWidth = 320;
+          const popupHeight = 260;
+          // Clamp to viewport
+          const viewportWidth = window.innerWidth;
+          const viewportHeight = window.innerHeight;
+          if (left + popupWidth > viewportWidth - 10) left = viewportWidth - popupWidth - 10;
+          if (left < 10) left = 10;
+          if (top + popupHeight > viewportHeight - 10) top = viewportHeight - popupHeight - 10;
+          if (top < 10) top = 10;
+          transform = undefined;
+        } else {
+          // fallback: center
+          left = '50%';
+          top = '50%';
+          transform = 'translate(-50%, -50%)';
+        }
+      } else if (left === null || top === null) {
+        // fallback: center
+        left = '50%';
+        top = '50%';
+        transform = 'translate(-50%, -50%)';
+      }
+
       const popupStyle = {
         position: 'fixed',
-        left: editNodePopupPos.x !== null ? editNodePopupPos.x : '50%',
-        top: editNodePopupPos.y !== null ? editNodePopupPos.y : '50%',
-        transform:
-          editNodePopupPos.x === null && editNodePopupPos.y === null
-            ? 'translate(-50%, -50%)'
-            : undefined,
+        left,
+        top,
+        transform,
         zIndex: 2000,
         background: '#fff',
         border: '1.5px solid #1976d2',
@@ -550,6 +614,7 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
         <div
           className="condec-edit-node-popup"
           style={popupStyle}
+          ref={nodeEditPopupRef}
         >
           <div
             className="condec-edit-node-popup-header"
@@ -584,8 +649,16 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
                   ...prev,
                   node: { ...prev.node, name: newName }
                 }));
+                // Save immediately
+                saveToUndoStack();
+                setDiagram(diagram => ({
+                  ...diagram,
+                  nodes: diagram.nodes.map(n =>
+                    n.id === node.id ? { ...node, name: newName } : n
+                  )
+                }));
+                setSelectedElement({ type: 'node', element: { ...node, name: newName } });
               }}
-              onBlur={() => saveToUndoStack()}
             />
           </div>
           <div className="property-group">
@@ -598,6 +671,15 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
                   ...prev,
                   node: { ...prev.node, constraint: newConstraint }
                 }));
+                // Save immediately
+                saveToUndoStack();
+                setDiagram(diagram => ({
+                  ...diagram,
+                  nodes: diagram.nodes.map(n =>
+                    n.id === node.id ? { ...node, constraint: newConstraint } : n
+                  )
+                }));
+                setSelectedElement({ type: 'node', element: { ...node, constraint: newConstraint } });
               }}
             >
               <option value="">None</option>
@@ -623,169 +705,55 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
                     ...prev,
                     node: { ...prev.node, constraintValue: newValue }
                   }));
+                  // Save immediately
+                  saveToUndoStack();
+                  setDiagram(diagram => ({
+                    ...diagram,
+                    nodes: diagram.nodes.map(n =>
+                      n.id === node.id ? { ...node, constraintValue: newValue } : n
+                    )
+                  }));
+                  setSelectedElement({ type: 'node', element: { ...node, constraintValue: newValue } });
                 }}
               />
             </div>
           )}
-          <div className="property-group">
-            <label>Position (X, Y):</label>
-            <div className="position-inputs">
-              <input
-                type="number"
-                value={Math.round(node.x)}
-                onChange={e => {
-                  const newX = parseInt(e.target.value) || 0;
-                  setEditNodePopup(prev => ({
-                    ...prev,
-                    node: { ...prev.node, x: newX }
-                  }));
-                }}
-              />
-              <input
-                type="number"
-                value={Math.round(node.y)}
-                onChange={e => {
-                  const newY = parseInt(e.target.value) || 0;
-                  setEditNodePopup(prev => ({
-                    ...prev,
-                    node: { ...prev.node, y: newY }
-                  }));
-                }}
-              />
-            </div>
-          </div>
           <div style={{display:'flex',gap:12,marginTop:18}}>
             <button
-              style={{flex:1,background:'#1976d2',color:'#fff',border:'none',borderRadius:4,padding:'8px 0',fontWeight:600}}
+              style={{
+                flex: 1,
+                background: '#d32f2f',
+                color: '#fff',
+                border: 'none',
+                borderRadius: 4,
+                padding: '8px 0',
+                fontWeight: 600
+              }}
               onClick={() => {
                 saveToUndoStack();
                 setDiagram(diagram => ({
                   ...diagram,
-                  nodes: diagram.nodes.map(n =>
-                    n.id === node.id ? { ...node } : n
-                  )
+                  nodes: diagram.nodes.filter(n => n.id !== node.id),
+                  relations: diagram.relations.filter(r => r.sourceId !== node.id && r.targetId !== node.id)
                 }));
                 setEditNodePopup(null);
                 setEditNodePopupPos({ x: null, y: null });
-                setSelectedElement({ type: 'node', element: { ...node } });
+                setSelectedElement(null);
               }}
-            >Save</button>
+            >Delete</button>
             <button
               style={{flex:1,background:'#eee',color:'#333',border:'none',borderRadius:4,padding:'8px 0'}}
               onClick={() => {
                 setEditNodePopup(null);
                 setEditNodePopupPos({ x: null, y: null });
               }}
-            >Cancel</button>
-          </div>
-        </div>
-      );
-    }
-
-    // Relation Edit
-    if (selectedElement && selectedElement.type === 'relation') {
-      const relation = selectedElement.element;
-      const relationTypeOptions = Object.values(RELATION_TYPES).map((value) => (
-        <option key={value} value={value}>{value}</option>
-      ));
-      
-      return (
-        <div
-          className="condec-edit-relation-popup"
-          style={{
-            position: 'fixed',
-            left: '50%',
-            top: '50%',
-            transform: 'translate(-50%, -50%)',
-            zIndex: 3000,
-            background: '#fff',
-            border: '1.5px solid #1976d2',
-            borderRadius: 8,
-            boxShadow: '0 4px 24px rgba(0,0,0,0.18)',
-            minWidth: 320,
-            maxWidth: 400,
-            padding: 24
-          }}
-        >
-          <h3 style={{marginTop:0,marginBottom:18,fontSize:18,color:'#1976d2'}}>Edit Relation</h3>
-          <div className="property-group">
-            <label>Type:</label>
-            <select
-              value={relation.type}
-              onChange={e => {
-                const newType = e.target.value;
-                saveToUndoStack();
-                const updatedRelations = diagram.relations.map(r => {
-                  if (r.id === relation.id) {
-                    return { ...r, type: newType };
-                  }
-                  return r;
-                });
-                setDiagram({ ...diagram, relations: updatedRelations });
-                setSelectedElement(prev => ({ ...prev, element: { ...prev.element, type: newType } }));
-              }}
-            >
-              {relationTypeOptions}
-            </select>
-          </div>
-          <div className="property-group">
-            <label>Source:</label>
-            <select
-              value={relation.sourceId}
-              onChange={e => {
-                const newSourceId = e.target.value;
-                saveToUndoStack();
-                const updatedRelations = diagram.relations.map(r => {
-                  if (r.id === relation.id) {
-                    return { ...r, sourceId: newSourceId };
-                  }
-                  return r;
-                });
-                setDiagram({ ...diagram, relations: updatedRelations });
-                setSelectedElement(prev => ({ ...prev, element: { ...prev.element, sourceId: newSourceId } }));
-              }}
-            >
-              {diagram.nodes.map(node => (
-                <option key={node.id} value={node.id}>{node.name}</option>
-              ))}
-            </select>
-          </div>
-          <div className="property-group">
-            <label>Target:</label>
-            <select
-              value={relation.targetId}
-              onChange={e => {
-                const newTargetId = e.target.value;
-                saveToUndoStack();
-                const updatedRelations = diagram.relations.map(r => {
-                  if (r.id === relation.id) {
-                    return { ...r, targetId: newTargetId };
-                  }
-                  return r;
-                });
-                setDiagram({ ...diagram, relations: updatedRelations });
-                setSelectedElement(prev => ({ ...prev, element: { ...prev.element, targetId: newTargetId } }));
-              }}
-            >
-              {diagram.nodes.map(node => (
-                <option key={node.id} value={node.id}>{node.name}</option>
-              ))}
-            </select>
-          </div>
-          <div style={{display:'flex',gap:12,marginTop:18}}>
-            <button
-              style={{flex:1,background:'#d32f2f',color:'#fff',border:'none',borderRadius:4,padding:'8px 0'}}
-              onClick={handleDelete}
-            >Delete</button>
-            <button
-              style={{flex:1,background:'#eee',color:'#333',border:'none',borderRadius:4,padding:'8px 0'}}
-              onClick={() => setSelectedElement(null)}
             >Close</button>
           </div>
         </div>
       );
     }
 
+    // Relation Edit: now handled as a sidebar, not a popup
     return null;
   };
 
@@ -1033,7 +1001,20 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
           onNodeDrag={handleNodeDrag}
           onAppend={handleAppendActivity}
         />
+        {/* Show node edit popup if editing a node */}
         {renderEditPopup()}
+        {/* Show relation edit sidebar if a relation is selected */}
+        {selectedElement && selectedElement.type === 'relation' && (
+          <RelationEditMenu
+            relation={selectedElement.element}
+            nodes={diagram.nodes}
+            setEditNodePopup={setEditNodePopup}
+            setEditNodePopupPos={setEditNodePopupPos}
+            setDiagram={setDiagram}
+            saveToUndoStack={saveToUndoStack}
+            setSelectedElement={setSelectedElement}
+          />
+        )}
         {renderPalette()}
       </div>
     </div>

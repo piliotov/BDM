@@ -3,8 +3,10 @@ import {
   layoutConnection, 
 } from './canvasUtils';
 import { CONSTRAINTS } from './diagramUtils';
-// We don't use getRelationMarkerIds directly in this file, but it's used by importers
+// We use these functions indirectly through imports in other files
+/* eslint-disable no-unused-vars */
 import { getRelationMarkerIds } from './relationIconUtils';
+/* eslint-enable no-unused-vars */
 
 // --- Relation Types ---
 export const RELATION_TYPES = {
@@ -68,6 +70,7 @@ export function createRelation(sourceId, targetId, relationType, diagram) {
  * @param {string} markerId The ID of the marker
  * @returns {number} The offset value to adjust the path
  */
+/* eslint-disable no-unused-vars */
 function getMarkerOffset(markerId) {
   if (!markerId) return 0;
   
@@ -78,6 +81,7 @@ function getMarkerOffset(markerId) {
   
   return 0;
 }
+/* eslint-enable no-unused-vars */
 
 /**
  * Update relation waypoints dynamically when nodes move (bpmn-js behavior)
@@ -206,8 +210,8 @@ export function getRelationVisual(relationType, isSelected) {
 export function isRelationAllowed(diagram, sourceId, targetId) {
   const targetNode = diagram.nodes.find(n => n.id === targetId);
   if (!targetNode) return false;
-
-  // Case 1: Prevent relations to INIT nodes
+  
+  // Important: Init nodes can never be targets (only sources)
   if (targetNode.constraint === CONSTRAINTS.INIT) {
     return false;
   }
@@ -216,10 +220,10 @@ export function isRelationAllowed(diagram, sourceId, targetId) {
   const incomingRelations = diagram.relations.filter(r => r.targetId === targetId);
   const incomingCount = incomingRelations.length;
 
-  // Case 2: Check other constraints
+  // Check other constraints
   switch (targetNode.constraint) {
     case CONSTRAINTS.ABSENCE:
-      // No relations allowed
+      // No incoming relations allowed
       return false;
 
     case CONSTRAINTS.ABSENCE_N:
@@ -263,5 +267,25 @@ export function reconnectRelation(relation, newSourceId, newTargetId, diagram) {
     sourceId: sourceId,
     targetId: targetId,
     waypoints: newWaypoints
+  };
+}
+
+/**
+ * Update the label position of a relation
+ * @param {Object} relation - The relation to update
+ * @param {Object} labelOffset - The new label offset {x, y}
+ * @param {Object} diagram - The current diagram
+ * @returns {Object} - The updated diagram
+ */
+export function updateRelationLabelPosition(relation, labelOffset, diagram) {
+  if (!diagram || !relation) return diagram;
+  
+  const updatedRelations = diagram.relations.map(r => 
+    r.id === relation.id ? { ...r, labelOffset } : r
+  );
+  
+  return {
+    ...diagram,
+    relations: updatedRelations
   };
 }

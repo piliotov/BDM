@@ -108,7 +108,7 @@ export function getDirection(p1, p2) {
 
 /**
  * Get docking point on the boundary of a node
- * similar to bpmn-js approach
+ * similar to bpmn-js approach, but now always on the ellipse boundary
  * @param {Object} node Node with x, y coordinates
  * @param {Object} point External point to dock to
  * @param {Object} nodeSize Node size {width, height}
@@ -120,27 +120,22 @@ export function getDockingPoint(node, point, nodeSize = { width: 100, height: 50
   const halfWidth = nodeSize.width / 2;
   const halfHeight = nodeSize.height / 2;
 
-  // Calculate the direction from center to the point
+  // Vector from center to external point
   const dx = point.x - centerX;
   const dy = point.y - centerY;
 
-  // Slope of the line from center to point
-  const slope = Math.abs(dx) < 0.001 ? Infinity : dy / dx;
-  const absSlope = Math.abs(slope);
-  
-  // Determine which edge to use based on direction and slope
-  // Compare slope with aspect ratio to determine intersection edge
-  if (absSlope > halfHeight / halfWidth) {
-    // Intersect with top or bottom edge
-    const y = dy > 0 ? centerY + halfHeight : centerY - halfHeight;
-    const x = dx === 0 ? centerX : centerX + (y - centerY) / slope;
-    return { x, y };
-  } else {
-    // Intersect with left or right edge
-    const x = dx > 0 ? centerX + halfWidth : centerX - halfWidth;
-    const y = dy === 0 ? centerY : centerY + slope * (x - centerX);
-    return { x, y };
+  // If the external point is at the center, just return the rightmost point
+  if (dx === 0 && dy === 0) {
+    return { x: centerX + halfWidth, y: centerY };
   }
+
+  // Calculate intersection with ellipse boundary
+  // Parametric equation: (x/halfWidth)^2 + (y/halfHeight)^2 = 1
+  const angle = Math.atan2(dy, dx);
+  const x = centerX + halfWidth * Math.cos(angle);
+  const y = centerY + halfHeight * Math.sin(angle);
+
+  return { x, y };
 }
 
 /**

@@ -48,8 +48,8 @@ export function addNode(e, mode, diagram, canvasOffset, zoom, saveToUndoStack) {
 export function isRelationAllowed(diagram, sourceId, targetId) {
   const targetNode = diagram.nodes.find(n => n.id === targetId);
   if (!targetNode) return false;
-
-  // Case 1: Prevent relations to INIT nodes
+  
+  // Important: Init nodes can never be targets (only sources)
   if (targetNode.constraint === CONSTRAINTS.INIT) {
     return false;
   }
@@ -58,10 +58,10 @@ export function isRelationAllowed(diagram, sourceId, targetId) {
   const incomingRelations = diagram.relations.filter(r => r.targetId === targetId);
   const incomingCount = incomingRelations.length;
 
-  // Case 2: Check other constraints
+  // Check other constraints
   switch (targetNode.constraint) {
     case CONSTRAINTS.ABSENCE:
-      // No relations allowed
+      // No incoming relations allowed
       return false;
 
     case CONSTRAINTS.ABSENCE_N:

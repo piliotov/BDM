@@ -29,6 +29,35 @@ export function ConDecNode({
   const [editValue, setEditValue] = useState(node.name);
   const inputRef = useRef();
 
+  // Check if the constraint is valid based on incoming relations
+  const isConstraintViolated = () => {
+    if (!node.constraint) return false;
+    
+    const incomingCount = node.incomingRelationsCount || 0;
+    
+    switch(node.constraint) {
+      case CONSTRAINTS.ABSENCE:
+        return incomingCount > 0;
+      
+      case CONSTRAINTS.ABSENCE_N:
+        return incomingCount > (node.constraintValue || 0);
+      
+      case CONSTRAINTS.EXISTENCE_N:
+        return incomingCount < (node.constraintValue || 0);
+      
+      case CONSTRAINTS.EXACTLY_N:
+        return incomingCount !== (node.constraintValue || 0);
+      
+      case CONSTRAINTS.INIT:
+        return incomingCount > 0;
+      
+      default:
+        return false;
+    }
+  };
+
+  const constraintViolated = isConstraintViolated();
+
   useEffect(() => {
     if (editing && inputRef.current) {
       inputRef.current.focus();
@@ -115,12 +144,39 @@ export function ConDecNode({
         height={height}
         rx="5"
         ry="5"
-        fill="#f5f5f5"
-        stroke={isSelected ? '#1a73e8' : '#000'}
-        strokeWidth={isSelected ? 2.5 : 1.5}
+        fill={constraintViolated ? "#ffebee" : "#f5f5f5"}
+        stroke={isSelected ? '#1a73e8' : constraintViolated ? '#d32f2f' : '#000'}
+        strokeWidth={isSelected ? 2.5 : constraintViolated ? 2 : 1.5}
         fillOpacity={0.95}
         style={{ cursor: mode === 'addRelation' ? 'crosshair' : 'pointer' }}
       />
+      
+      {/* Constraint violation indicator */}
+      {constraintViolated && (
+        <g>
+          <circle
+            cx={x + width/2 - 10}
+            cy={y - height/2 + 10}
+            r={8}
+            fill="#d32f2f"
+            stroke="#fff"
+            strokeWidth="1"
+          />
+          <text
+            x={x + width/2 - 10}
+            y={y - height/2 + 10}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fontSize="12px"
+            fill="#fff"
+            fontWeight="bold"
+            style={{ userSelect: 'none' }}
+          >
+            !
+          </text>
+        </g>
+      )}
+      
       {constraintNotation}
       {/* Inline renaming input or text */}
       {editing ? (

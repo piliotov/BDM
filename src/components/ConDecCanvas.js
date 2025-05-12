@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { ConDecRelation } from './ConDecRelations';
 import { ConDecNode } from './ConDecNode';
 import { ConDecNodeMenu } from './ConDecNodeMenu';
@@ -35,6 +35,7 @@ export function ConDecCanvas({
   onNodeMenuDelete,
   onNodeMenuClose,
   onAppend, // <-- add this prop
+  onNodeMenuEditButton, // <-- new prop
   // New panning state props
   isPanning = false,
   setIsPanning,
@@ -43,9 +44,16 @@ export function ConDecCanvas({
   panOrigin = { x: 0, y: 0 },
   setPanOrigin,
   onNodeDrag,
-  onNodeContextMenu
+  onNodeContextMenu,
+  multiSelectedNodes = [],
+  setMultiSelectedNodes,
+  renderMultiSelectBoundingBox,
+  renderMultiSelectMenu,
+  saveToUndoStack, // Added this prop
 }) {
   const svgRef = useRef();
+  // Add state for alignment guides
+  const [alignmentGuides, setAlignmentGuides] = useState({ x: null, y: null });
 
   // Set up canvas panning functionality
   const { handlePanStart, handlePanMove, handlePanEnd } = useCanvasPanning({
@@ -113,10 +121,12 @@ export function ConDecCanvas({
       const targetNode = nodes.find(n => n.id === relation.targetId);
       if (!sourceNode || !targetNode) return null;
       
-      const isSelected = selectedElement &&
+      // Do not show relation menu if multi-select is active
+      const isSelected = !multiSelectedNodes.length && selectedElement &&
         selectedElement.type === 'relation' &&
         selectedElement.element.id === relation.id;
       
+      // Make sure to pass all necessary props to ConDecRelation
       return (
         <ConDecRelation
           key={relation.id}
@@ -133,13 +143,15 @@ export function ConDecCanvas({
           onWaypointDragEnd={handleWaypointDragEnd}
           canvasOffset={canvasOffset}
           zoom={zoom}
+          saveToUndoStack={saveToUndoStack}
         />
       );
     });
     
     // Then render nodes (they should be on top of relations)
     const nodeElements = nodes.map(node => {
-      const isSelected = selectedElement &&
+      // Do not show node menu if multi-select is active
+      const isSelected = !multiSelectedNodes.length && selectedElement &&
         selectedElement.type === 'node' &&
         selectedElement.element.id === node.id;
       
@@ -162,11 +174,20 @@ export function ConDecCanvas({
           {isSelected && (
             <ConDecNodeMenu
               node={node}
-              onEdit={() => onNodeMenuEdit(node)}
+              onEdit={(n, evt) => {
+                if (onNodeMenuEdit) onNodeMenuEdit(n);
+              }}
               onDelete={onNodeMenuDelete}
               onAppend={onAppend ? () => onAppend(node) : undefined}
               onClose={onNodeMenuClose}
               zoom={zoom}
+              onTypeChange={type => {
+                // Update node type and apply immediately
+                const updatedNodes = diagram.nodes.map(n =>
+                  n.id === node.id ? { ...n, type } : n
+                );
+                if (typeof onNodeEdit === 'function') onNodeEdit(updatedNodes);
+              }}
             />
           )}
         </React.Fragment>
@@ -181,11 +202,29 @@ export function ConDecCanvas({
         {relationElements}
         {temporaryRelation}
         {nodeElements}
+        {/* Render blue bounding box for multi-select */}
+        {renderMultiSelectBoundingBox && renderMultiSelectBoundingBox()}
+        {/* Render floating menu for multi-select */}
+        {renderMultiSelectMenu && renderMultiSelectMenu()}
       </>
     );
   };
 
-  // Enhance handleMouseMove to handle panning
+  // Helper: find alignment lines for the dragged node
+  function getAlignmentGuides(draggedNode, nodes) {
+    if (!draggedNode) return { x: null, y: null };
+    // Snap threshold (in px)
+    const threshold = 2;
+    let guideX = null, guideY = null;
+    for (const n of nodes) {
+      if (n.id === draggedNode.id) continue;
+      if (Math.abs(n.x - draggedNode.x) <= threshold) guideX = n.x;
+      if (Math.abs(n.y - draggedNode.y) <= threshold) guideY = n.y;
+    }
+    return { x: guideX, y: guideY };
+  }
+
+  // Enhance handleMouseMove to show alignment guides
   const handleMouseMove = (e) => {
     const rect = svgRef.current.getBoundingClientRect();
     const currentX = e.clientX - rect.left;
@@ -224,18 +263,25 @@ export function ConDecCanvas({
       if (typeof onRelationEdit === 'function') {
         onRelationEdit(updatedRelations);
       }
-    } else if (newRelation && newRelation.sourceId) {
-      setNewRelation && setNewRelation(prev => ({
-        ...prev,
-        currentX: currentX,
-        currentY: currentY
-      }));
-    } else if (mode === 'select' && selectionBox) {
-      onSelectionMouseMove && onSelectionMouseMove(e);
+
+      // Find alignment guides
+      const guides = getAlignmentGuides(draggedNode, updatedNodes);
+      setAlignmentGuides(guides);
+    } else {
+      setAlignmentGuides({ x: null, y: null });
+      if (newRelation && newRelation.sourceId) {
+        setNewRelation && setNewRelation(prev => ({
+          ...prev,
+          currentX: currentX,
+          currentY: currentY
+        }));
+      } else if (mode === 'select' && selectionBox) {
+        onSelectionMouseMove && onSelectionMouseMove(e);
+      }
     }
   };
 
-  // Enhance handleMouseUp to handle panning
+  // Enhance handleMouseUp to clear guides
   const handleMouseUp = (e) => {
     // End panning if active
     if (isPanning) {
@@ -257,6 +303,7 @@ export function ConDecCanvas({
     } else if (mode === 'select' && selectionBox) {
       onSelectionMouseUp && onSelectionMouseUp(e);
     }
+    setAlignmentGuides({ x: null, y: null });
   };
 
   // Enhanced canvas mouse down handler to support panning
@@ -299,9 +346,23 @@ export function ConDecCanvas({
     onRelationEdit && onRelationEdit(updatedRelationsList);
   };
   
-  const handleWaypointDragEnd = (relationId) => {
-    // This function can be used to finalize the drag operation
-    // e.g., saving to history stack for undo
+  // Enhance the handleWaypointDragEnd function to properly save label positions
+  const handleWaypointDragEnd = (relationId, isLabelDrag = false) => {
+    if (!relationId) return;
+
+    if (typeof onRelationEdit === 'function' && diagram.relations) {
+      saveToUndoStack && saveToUndoStack();
+      
+      const relation = diagram.relations.find(r => r.id === relationId);
+      if (relation) {
+        // Make sure we keep any updates to the relation
+        const updatedRelations = diagram.relations.map(r => 
+          r.id === relationId ? relation : r
+        );
+        
+        onRelationEdit(updatedRelations);
+      }
+    }
   };
 
   const renderTemporaryRelation = () => {
@@ -356,6 +417,31 @@ export function ConDecCanvas({
         <RelationMarkers />
 
         <g transform={`translate(${canvasOffset.x},${canvasOffset.y}) scale(${zoom})`}>
+          {/* Render alignment guides */}
+          {alignmentGuides.x !== null && (
+            <line
+              x1={alignmentGuides.x}
+              y1={-10000}
+              x2={alignmentGuides.x}
+              y2={10000}
+              stroke="#1976d2"
+              strokeWidth={1.5/zoom}
+              strokeDasharray="4,2"
+              pointerEvents="none"
+            />
+          )}
+          {alignmentGuides.y !== null && (
+            <line
+              x1={-10000}
+              y1={alignmentGuides.y}
+              x2={10000}
+              y2={alignmentGuides.y}
+              stroke="#1976d2"
+              strokeWidth={1.5/zoom}
+              strokeDasharray="4,2"
+              pointerEvents="none"
+            />
+          )}
           {/* Render diagram elements with z-index management */}
           {renderDiagramElements()}
           

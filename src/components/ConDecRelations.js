@@ -101,63 +101,72 @@ export function ConDecRelation({
     };
   }, [draggedWaypointIndex, currentWaypoints, relation.id, canvasOffset, zoom, onWaypointDrag, onWaypointDragEnd]);
 
+  // Calculate midpoint for label and negation marker
+  const midPoint = getPathMidpoint(currentWaypoints);
+
+  // Declare labelX/labelY before any use
+  const labelX = midPoint?.x + (labelOffset?.x || 0);
+  const labelY = midPoint?.y + (labelOffset?.y || 0);
+
   // Handle label dragging
   useEffect(() => {
     if (!isDraggingLabel) return;
-    
+
+    // Store the offset between mouse and label center at drag start
+    let dragOffset = null;
+
     const handleLabelDrag = (e) => {
-      e.stopPropagation(); // Stop propagation to prevent other events
-      
+      e.stopPropagation();
+
       const svg = e.target.closest('svg') || document.querySelector('svg.condec-canvas');
       if (!svg) return;
-      
-      // Get SVG coordinates
+
       const point = svg.createSVGPoint();
       point.x = e.clientX;
       point.y = e.clientY;
       const svgPoint = point.matrixTransform(svg.getScreenCTM().inverse());
-      
-      // Calculate midpoint for reference
-      const midIndex = Math.floor(currentWaypoints.length / 2);
-      const midPoint = currentWaypoints[midIndex] || {
-        x: (currentWaypoints[0].x + currentWaypoints[currentWaypoints.length - 1].x) / 2,
-        y: (currentWaypoints[0].y + currentWaypoints[currentWaypoints.length - 1].y) / 2
-      };
-      
-      // Calculate offset from midpoint
+
+      // On first move, calculate dragOffset
+      if (!dragOffset) {
+        dragOffset = {
+          x: svgPoint.x - labelX,
+          y: svgPoint.y - labelY
+        };
+      }
+
+      // Calculate new offset from midpoint, keeping the drag offset
       const newOffset = {
-        x: ((svgPoint.x - canvasOffset.x) / zoom) - midPoint.x,
-        y: ((svgPoint.y - canvasOffset.y) / zoom) - midPoint.y
+        x: ((svgPoint.x - dragOffset.x) - midPoint.x),
+        y: ((svgPoint.y - dragOffset.y) - midPoint.y)
       };
-      
+
       setLabelOffset(newOffset);
-      
-      // Update relation with new label offset
+
       if (onWaypointDrag) {
-        const updatedRelations = [{
+        const updatedRelation = {
           ...relation,
           labelOffset: newOffset
-        }];
-        onWaypointDrag(relation.id, currentWaypoints, updatedRelations);
+        };
+        onWaypointDrag(relation.id, currentWaypoints, [updatedRelation]);
       }
     };
 
     const handleLabelDragEnd = (e) => {
-      e.stopPropagation(); // Stop propagation to prevent other events
+      e.stopPropagation();
       setIsDraggingLabel(false);
       if (onWaypointDragEnd) {
-        onWaypointDragEnd(relation.id);
+        onWaypointDragEnd(relation.id, true);
       }
     };
-    
+
     window.addEventListener('mousemove', handleLabelDrag);
     window.addEventListener('mouseup', handleLabelDragEnd);
-    
+
     return () => {
       window.removeEventListener('mousemove', handleLabelDrag);
       window.removeEventListener('mouseup', handleLabelDragEnd);
     };
-  }, [isDraggingLabel, relation, currentWaypoints, canvasOffset, zoom, onWaypointDrag, onWaypointDragEnd]);
+  }, [isDraggingLabel, relation, currentWaypoints, canvasOffset, zoom, onWaypointDrag, onWaypointDragEnd, labelX, labelY, midPoint]);
   
   // Early return if we don't have the necessary data
   if (!sourceNode || !targetNode || currentWaypoints.length < 2) {
@@ -205,13 +214,6 @@ export function ConDecRelation({
     // Fallback
     return points[points.length - 1];
   }
-
-  // Calculate midpoint for label and negation marker
-  const midPoint = getPathMidpoint(currentWaypoints);
-
-  // Place label at the midpoint plus the label offset
-  const labelX = midPoint.x;
-  const labelY = midPoint.y;
 
   // Control point size adjusts with zoom
   const controlPointSize = 8 / zoom;
@@ -426,6 +428,26 @@ export function ConDecRelation({
     return trimmed;
   }
 
+  // When rendering the relation label, offset it a few pixels up from the path
+  function renderRelationLabel(relation, midPoint, zoom) {
+    // Offset label 10px up (in SVG coordinates, so divide by zoom)
+    const labelYOffset = -10 / zoom;
+    return (
+      <text
+        x={labelX}
+        y={labelY + labelYOffset}
+        fontSize={`${12 / zoom}px`}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fill={style.stroke}
+        fontWeight={isSelected ? "bold" : "normal"}
+        pointerEvents="none"
+      >
+        {relation.type}
+      </text>
+    );
+  }
+
   return (
     <g 
       className="condec-relation"
@@ -502,45 +524,41 @@ export function ConDecRelation({
         return null;
       })()}
 
-      {/* Render negation marker at midpoint perpendicular to path */}
+      {/* Render negation marker at midpoint, crossing the path, fixed size, 20px apart */}
       {negation && (() => {
-        // Calculate direction at midpoint
+        // Calculate direction at midpoint (angle of the path at the midpoint)
         let angle = 0;
         if (currentWaypoints.length >= 2) {
-          // Find the segment containing the midpoint
           let totalLength = 0;
           const segmentLengths = [];
           for (let i = 0; i < currentWaypoints.length - 1; i++) {
-        const dx = currentWaypoints[i + 1].x - currentWaypoints[i].x;
-        const dy = currentWaypoints[i + 1].y - currentWaypoints[i].y;
-        const len = Math.hypot(dx, dy);
-        segmentLengths.push(len);
-        totalLength += len;
+            const dx = currentWaypoints[i + 1].x - currentWaypoints[i].x;
+            const dy = currentWaypoints[i + 1].y - currentWaypoints[i].y;
+            const len = Math.hypot(dx, dy);
+            segmentLengths.push(len);
+            totalLength += len;
           }
           let midDist = totalLength / 2;
           let acc = 0;
           for (let i = 0; i < segmentLengths.length; i++) {
-        if (acc + segmentLengths[i] >= midDist) {
-          // Direction vector of this segment
-          const dx = currentWaypoints[i + 1].x - currentWaypoints[i].x;
-          const dy = currentWaypoints[i + 1].y - currentWaypoints[i].y;
-          angle = Math.atan2(dy, dx) * 180 / Math.PI + 90; // Perpendicular
-          break;
-        }
-        acc += segmentLengths[i];
+            if (acc + segmentLengths[i] >= midDist) {
+              const dx = currentWaypoints[i + 1].x - currentWaypoints[i].x;
+              const dy = currentWaypoints[i + 1].y - currentWaypoints[i].y;
+              angle = Math.atan2(dy, dx) * 180 / Math.PI;
+              break;
+            }
+            acc += segmentLengths[i];
           }
         }
+        // Negation marker position
         return (
-          <use 
-        href="#midpoint-negation" 
-        x={midPoint.x} 
-        y={midPoint.y}
-        width={20/zoom}
-        height={20/zoom}
-        stroke={style.stroke}
-        transform={`rotate(${angle},${midPoint.x},${midPoint.y})`}
-        pointerEvents="none"
-          />
+          <g
+            transform={`translate(${midPoint.x},${midPoint.y}) rotate(${angle})`}
+            pointerEvents="none"
+          >
+            <line x1={-3} y1={-12} x2={-3} y2={12} stroke={style.stroke} strokeWidth={1.2} />
+            <line x1={3} y1={-12} x2={3} y2={12} stroke={style.stroke} strokeWidth={1.2} />
+          </g>
         );
       })()}
 
@@ -549,34 +567,37 @@ export function ConDecRelation({
         className="condec-relation-label" 
         cursor={isSelected ? "move" : "pointer"}
         onMouseDown={isSelected ? handleLabelMouseDown : handleRelationClick}
-        transform={`translate(${labelOffset.x || 0},${labelOffset.y || 0})`}
-        pointerEvents="all" // Ensure click events work on this element
+        pointerEvents="all"
       >
-        {/* Background rect for easier selection */}
+        {/* Background rect for easier selection - make it more visible when selected */}
         <rect
           x={labelX - 40}
           y={labelY - 10}
           width={80} 
           height={20}
-          fill="transparent"
+          fill={isSelected ? "rgba(255,255,255,0.7)" : "transparent"}
           stroke={isSelected ? "#1a73e8" : "transparent"}
           strokeWidth={isSelected ? 1/zoom : 0}
           strokeDasharray={isSelected ? `${2/zoom},${1/zoom}` : "0"}
-          pointerEvents="all" // Ensure click events work on this element
+          rx={4/zoom}
+          ry={4/zoom}
+          pointerEvents="all"
         />
-        <text
-          x={labelX}
-          y={labelY}
-          fontSize={`${12/zoom}px`}
-          textAnchor="middle"
-          dominantBaseline="middle"
-          fill={style.stroke}
-          pointerEvents="none"
-        >
-          {relation.type}
-        </text>
+        {/* Add a small drag handle indicator when selected */}
+        {isSelected && (
+          <g transform={`translate(${labelX}, ${labelY - 15})`} pointerEvents="none">
+            <path 
+              d="M-15,0 H15 M-15,3 H15 M-15,6 H15" 
+              stroke="#1a73e8" 
+              strokeWidth={1.5/zoom}
+              strokeLinecap="round"
+              opacity={0.8}
+            />
+          </g>
+        )}
+        {renderRelationLabel(relation, midPoint, zoom)}
       </g>
-
+  
       {/* Control points - only visible when selected */}
       {isSelected && currentWaypoints.map((point, index) => (
         <rect

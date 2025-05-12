@@ -56,3 +56,61 @@
   padding: 10px 16px;
   background-color: #fff;
 }
+
+/* Reusable button for view mode selector */
+.view-mode-btn {
+  padding: 8px 15px;
+  font-size: 14px;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+  height: 36px;
+  min-width: 80px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, border 0.15s;
+  margin-right: 10px;
+}
+.view-mode-btn.active {
+  background: #e3f0fd;
+  border-color: #1976d2;
+}
+.view-mode-btn:last-child {
+  margin-right: 0;
+}
+.view-mode-btn:hover, .view-mode-btn:focus {
+  background: #f5f5f5;
+  border-color: #1976d2;
+  outline: none;
+}
+
+/* Reusable action button for popups */
+.action-btn {
+  flex: 1;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 0;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  margin-right: 0;
+}
+.action-btn.danger {
+  background: #d32f2f;
+  color: #fff;
+}
+.action-btn.danger:hover, .action-btn.danger:focus {
+  background: #b71c1c;
+}
+.action-btn.neutral {
+  background: #eee;
+  color: #333;
+}
+.action-btn.neutral:hover, .action-btn.neutral:focus {
+  background: #e3f0fd;
+  color: #1976d2;
+}

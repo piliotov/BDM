@@ -1,5 +1,4 @@
 import React from 'react';
-import { transform } from 'tiny-svg';
 
 // Minimal BPMN-style context pad (floating round buttons)
 const ICON_SIZE = 22;
@@ -25,43 +24,55 @@ const ACTION_ICONS = {
   // Add more actions/icons as needed
 };
 
-// Example utility functions to mimic ContextPadProvider logic
-function getContextPadActions(node, { onEdit, onDelete, onAppend }) {
-  const actions = [];
+// Helper function to validate constraints
+function validateNodeConstraints(node, diagram = { relations: [] }) {
+  const incomingRelations = diagram.relations.filter(r => r.targetId === node.id).length;
+  const outgoingRelations = diagram.relations.filter(r => r.sourceId === node.id).length;
 
-  if (onEdit) {
-    actions.push({
-      key: 'edit',
-      handler: onEdit,
-      ...ACTION_ICONS.edit
-    });
+  switch (node.constraint) {
+    case 'absence':
+      return incomingRelations === 0
+        ? { valid: true }
+        : { valid: false, message: 'Must have no incoming relations' };
+
+    case 'absence_n':
+      return incomingRelations <= (node.constraintValue || 0)
+        ? { valid: true }
+        : { valid: false, message: `Exceeds max ${node.constraintValue} incoming relations` };
+
+    case 'existence_n':
+      return incomingRelations >= (node.constraintValue || 0)
+        ? { valid: true }
+        : { valid: false, message: `Needs at least ${node.constraintValue} incoming relations` };
+
+    case 'exactly_n':
+      return incomingRelations === (node.constraintValue || 0)
+        ? { valid: true }
+        : { valid: false, message: `Must have exactly ${node.constraintValue} incoming relations` };
+
+    case 'init':
+      return incomingRelations === 0
+        ? { valid: true }
+        : { valid: false, message: 'Init activities cannot have incoming relations' };
+
+    default:
+      return { valid: true };
   }
-  // Always allow append for activity nodes
-  if (onAppend && node && node.type === 'activity') {
-    actions.push({
-      key: 'append',
-      handler: onAppend,
-      ...ACTION_ICONS.append
-    });
-  }
-  if (onDelete) {
-    actions.push({
-      key: 'delete',
-      handler: onDelete,
-      ...ACTION_ICONS.delete
-    });
-  }
-  return actions;
 }
 
+// --- Main Node Menu (without wrench button and type menu) ---
 export function ConDecNodeMenu({
   node,
+  diagram = { relations: [] }, // Ensure diagram has a default value
   onEdit,
   onDelete,
   onAppend,
+  onClose,
   zoom = 1
 }) {
   if (!node) return null;
+
+  const validation = validateNodeConstraints(node, diagram);
 
   const nodeWidth = 100;
   const nodeHeight = 50;
@@ -69,9 +80,8 @@ export function ConDecNodeMenu({
   const baseX = node.x + nodeWidth / 2 + pad;
   const baseY = node.y - nodeHeight / 2 - pad;
 
-  const actions = getContextPadActions(node, { onEdit, onDelete, onAppend });
+  const actions = Object.entries(ACTION_ICONS);
 
- 
   const btnClass = "condec-context-btn";
   const btnStyle = {
     display: 'inline-flex',
@@ -79,15 +89,15 @@ export function ConDecNodeMenu({
     justifyContent: 'center',
     width: `${ICON_SIZE}px`,
     height: `${ICON_SIZE}px`,
-    background: '#fff', // white background
-    border: '1px solid transparent',
+    background: validation.valid ? '#fff' : '#ffebee',
+    border: validation.valid ? '1px solid transparent' : '1px solid #d32f2f',
     margin: '0 2px',
     cursor: 'pointer',
     transition: 'none',
     outline: 'none',
     padding: 0
   };
-// Add hover effect
+
   return (
     <>
       <style>
@@ -102,16 +112,35 @@ export function ConDecNodeMenu({
         style={{ pointerEvents: 'all' }}
         transform={`translate(${baseX},${baseY}) scale(${1/zoom})`}
       >
-        <foreignObject x={0} y={0} width={ICON_SIZE * actions.length + 12} height={ICON_SIZE + 4}>
+        <foreignObject x={0} y={0} width={ICON_SIZE * 4 + 32} height={ICON_SIZE + 4}>
           <div style={{ display: 'flex', gap: 4, background: 'none', pointerEvents: 'all' }}>
-            {actions.map(action => (
+            {validation.valid ? null : (
+              <div
+                style={{
+                  color: '#d32f2f',
+                  fontSize: '14px',
+                  fontWeight: 'bold',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+              >
+                <span>⚠️</span>
+                <span>{validation.message}</span>
+              </div>
+            )}
+            {actions.map(([key, action]) => (
               <button
-                key={action.key}
+                key={key}
                 className={btnClass}
-                style={{ ...btnStyle, borderColor: 'transparent' }}
+                style={btnStyle}
                 title={action.title}
-                tabIndex={-1}
-                onClick={e => { e.stopPropagation(); action.handler && action.handler(node); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (key === 'edit' && onEdit) onEdit(node, e);
+                  if (key === 'delete' && onDelete) onDelete(node);
+                  if (key === 'append' && onAppend) onAppend(node);
+                }}
               >
                 {action.icon}
               </button>
