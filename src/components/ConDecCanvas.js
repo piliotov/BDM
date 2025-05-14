@@ -1,16 +1,14 @@
 import React, { useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import { ConDecRelation } from './ConDecRelations';
 import { ConDecNode } from './ConDecNode';
-import { ConDecNodeMenu } from './FloatingNodeMenu'; // <-- Add this import
+import { ConDecNodeMenu } from './FloatingNodeMenu'; 
 import { calculateIntersectionPoint } from '../utils/geometryUtils';
 import { useCanvasPanning } from '../utils/canvasUtils';
-import { updateRelationsForNode } from '../utils/relationUtils';
+import { updateRelationsForNode, updateRelationWithFixedEndpoints } from '../utils/relationUtils';
 import { RelationMarkers } from '../utils/relationIconUtils';
 import {
-  startConnectMode,
   endConnectMode,
   getConnectModeState,
-  shouldHandleNodeClick
 } from '../utils/connectModeUtils';
 
 export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
@@ -18,20 +16,14 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
     diagram,
     selectedElement,
     mode,
-    onSelectElement,
-    onNodeRename,
-    onRelationCreate,
     onNodeEdit,
     onRelationEdit,
-    newRelation,
-    setNewRelation,
     setMousePosition,
     draggedElement,
     setDraggedElement,
     onCanvasClick,
     canvasOffset = { x: 0, y: 0 },
     setCanvasOffset,
-    onCanvasMouseDown,
     onSelectionMouseMove,
     onSelectionMouseUp,
     zoom = 1,
@@ -57,8 +49,16 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
 
   const [alignmentGuides, setAlignmentGuides] = useState({ x: null, y: null });
 
-  // Add state for connect-from-node-menu mode
+  // State for tracking relation source when using connect from node menu
   const [connectFromNodeMenu, setConnectFromNodeMenu] = useState(null);
+
+  // State for two-step relation creation
+  const [relationCreationState, setRelationCreationState] = useState({
+    active: false,
+    sourceNode: null,
+    sourceId: null
+  });
+  const [relationMouse, setRelationMouse] = useState(null);
 
   // Set up canvas panning functionality
   const { handlePanStart, handlePanMove, handlePanEnd } = useCanvasPanning({
@@ -73,15 +73,16 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
   // --- Node drag/relation logic ---
   const handleNodeInteractionStart = (nodeId, e) => {
     if (mode === 'addRelation') {
-      const sourceNode = diagram.nodes.find(n => n.id === nodeId);
-      setNewRelation({
-        sourceId: nodeId,
-        sourceNode,
-        targetId: null,
-        targetNode: null,
-        currentX: e.clientX,
-        currentY: e.clientY
-      });
+      // Only allow setting source if not already active
+      if (!relationCreationState.active) {
+        const sourceNode = diagram.nodes.find(n => n.id === nodeId);
+        setRelationCreationState({
+          active: true,
+          sourceNode,
+          sourceId: nodeId
+        });
+      }
+      // If already active, do nothing (wait for target)
     } else {
       setDraggedElement({
         id: nodeId,
@@ -133,7 +134,7 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
           isSelected={isSelected}
           onSelect={(e) => {
             e.stopPropagation();
-            onSelectElement('relation', relation.id);
+            props.onSelectElement('relation', relation.id);
           }}
           calculateIntersectionPoint={calculateIntersectionPoint}
           onWaypointDrag={handleWaypointDrag}
@@ -147,9 +148,9 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
     
     const handleNodeClick = (nodeId, e) => {
       e.stopPropagation();
+      
       // --- Handle connect-from-node-menu mode ---
       if (connectFromNodeMenu && connectFromNodeMenu.sourceId && nodeId !== connectFromNodeMenu.sourceId) {
-        // Create relation from sourceId to nodeId
         if (props.onRelationCreate) {
           props.onRelationCreate(connectFromNodeMenu.sourceId, nodeId);
         }
@@ -157,20 +158,39 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
         if (props.setMode) props.setMode('hand');
         return;
       }
-      // --- Handle palette addRelation mode (drag) ---
-      if (props.mode === 'addRelation' && props.setNewRelation) {
-        // Start drag mode as before
-        const sourceNode = diagram.nodes.find(n => n.id === nodeId);
-        props.setNewRelation({
-          sourceId: nodeId,
-          sourceNode,
-          targetId: null,
-          targetNode: null,
-          currentX: sourceNode.x,
-          currentY: sourceNode.y
-        });
+      
+      // --- Palette relation tool: click source, then click target ---
+      if (props.mode === 'addRelation') {
+        if (!relationCreationState.active) {
+          // First click: set source node
+          const sourceNode = diagram.nodes.find(n => n.id === nodeId);
+          setRelationCreationState({
+            active: true,
+            sourceNode,
+            sourceId: nodeId
+          });
+          setRelationMouse(null);
+          return;
+        } else if (
+          relationCreationState.active &&
+          nodeId !== relationCreationState.sourceId
+        ) {
+          // Only allow target selection if source is already set and target is different
+          if (props.onRelationCreate) {
+            props.onRelationCreate(relationCreationState.sourceId, nodeId);
+          }
+          setRelationCreationState({
+            active: false,
+            sourceNode: null,
+            sourceId: null
+          });
+          setRelationMouse(null);
+          return;
+        }
+        // If already active and clicking the source again, ignore (do not reset source)
         return;
       }
+      
       // Otherwise, normal selection
       props.onSelectElement('node', nodeId);
     };
@@ -237,8 +257,11 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
             onClose={props.onNodeMenuClose}
             zoom={zoom}
             onConnect={(node) => {
-              // Enable connect-from-node-menu mode
-              setConnectFromNodeMenu({ sourceId: node.id });
+              // Enable connect-from-node-menu mode with visual feedback
+              setConnectFromNodeMenu({ 
+                sourceId: node.id,
+                sourceNode: node  // Store the entire node to draw the line
+              });
               if (props.setMode) props.setMode('connectFromNodeMenu');
             }}
           />
@@ -246,21 +269,27 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
       }
     }
 
-    // --- Show temporary line for connect-from-node-menu mode ---
+    // --- Show temporary line for relation creation modes ---
     let temporaryRelation = null;
-    if (connectFromNodeMenu && connectFromNodeMenu.sourceId) {
-      const sourceNode = nodes.find(n => n.id === connectFromNodeMenu.sourceId);
-      if (sourceNode && props.mousePosition) {
-        const sourcePoint = { x: sourceNode.x, y: sourceNode.y };
-        const targetPoint = {
-          x: (props.mousePosition.x - (props.canvasOffset?.x || 0)) / (props.zoom || 1),
-          y: (props.mousePosition.y - (props.canvasOffset?.y || 0)) / (props.zoom || 1)
-        };
-        const sourceEdgePoint = calculateIntersectionPoint(targetPoint, sourcePoint);
-        temporaryRelation = (
+    
+    // For addRelation mode (palette tool)
+    if (
+      props.mode === 'addRelation' &&
+      relationCreationState.active &&
+      relationCreationState.sourceNode &&
+      relationMouse
+    ) {
+      const sourcePoint = { x: relationCreationState.sourceNode.x, y: relationCreationState.sourceNode.y };
+      const targetPoint = {
+        x: (relationMouse.x - (props.canvasOffset?.x || 0)) / (props.zoom || 1),
+        y: (relationMouse.y - (props.canvasOffset?.y || 0)) / (props.zoom || 1)
+      };
+
+      temporaryRelation = (
+        <>
           <line
-            x1={sourceEdgePoint.x}
-            y1={sourceEdgePoint.y}
+            x1={sourcePoint.x}
+            y1={sourcePoint.y}
             x2={targetPoint.x}
             y2={targetPoint.y}
             stroke="#1a73e8"
@@ -269,11 +298,51 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
             markerEnd="url(#arrow)"
             style={{ pointerEvents: 'none' }}
           />
-        );
-      }
-    } else if (props.newRelation && props.newRelation.sourceNode) {
-      // ...existing code for palette drag mode...
-      temporaryRelation = renderTemporaryRelation();
+          <circle
+            cx={sourcePoint.x}
+            cy={sourcePoint.y}
+            r="3"
+            fill="#1a73e8"
+            style={{ pointerEvents: 'none' }}
+          />
+        </>
+      );
+    }
+    // For connect-from-node-menu mode (floating menu)
+    else if (
+      props.mode === 'connectFromNodeMenu' &&
+      connectFromNodeMenu &&
+      connectFromNodeMenu.sourceNode &&
+      props.mousePosition
+    ) {
+      const sourceNode = connectFromNodeMenu.sourceNode;
+      const sourcePoint = { x: sourceNode.x, y: sourceNode.y };
+      const targetPoint = {
+        x: (props.mousePosition.x - (props.canvasOffset?.x || 0)) / (props.zoom || 1),
+        y: (props.mousePosition.y - (props.canvasOffset?.y || 0)) / (props.zoom || 1)
+      };
+      temporaryRelation = (
+        <>
+          <line
+            x1={sourcePoint.x}
+            y1={sourcePoint.y}
+            x2={targetPoint.x}
+            y2={targetPoint.y}
+            stroke="#1a73e8"
+            strokeWidth="1.5"
+            strokeDasharray="5,5"
+            markerEnd="url(#arrow)"
+            style={{ pointerEvents: 'none' }}
+          />
+          <circle
+            cx={sourcePoint.x}
+            cy={sourcePoint.y}
+            r="3"
+            fill="#1a73e8"
+            style={{ pointerEvents: 'none' }}
+          />
+        </>
+      );
     }
 
     return (
@@ -304,7 +373,7 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
     return { x: guideX, y: guideY };
   }
 
-  // Enhance handleMouseMove to show alignment guides
+  // Enhance handleMouseMove to show alignment guides and update temporary relation
   const handleMouseMove = (e) => {
     const rect = svgRef.current.getBoundingClientRect();
     const currentX = e.clientX - rect.left;
@@ -317,8 +386,8 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
       return;
     }
 
+    // Handle node dragging
     if (draggedElement) {
-      // Convert mouse movement to diagram coordinates (centered)
       const deltaX = (e.clientX - draggedElement.startX) / zoom;
       const deltaY = (e.clientY - draggedElement.startY) / zoom;
       const updatedNodes = diagram.nodes.map(node => {
@@ -332,11 +401,9 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
         return node;
       });
 
-      // Update relations connected to the dragged node
       const draggedNode = updatedNodes.find(node => node.id === draggedElement.id);
       const updatedRelations = updateRelationsForNode(draggedNode, { ...diagram, nodes: updatedNodes });
 
-      // Update diagram with new node positions and relation waypoints
       if (typeof onNodeEdit === 'function') {
         onNodeEdit(updatedNodes);
       }
@@ -344,18 +411,22 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
         onRelationEdit(updatedRelations);
       }
 
-      // Find alignment guides
       const guides = getAlignmentGuides(draggedNode, updatedNodes);
       setAlignmentGuides(guides);
     } else {
       setAlignmentGuides({ x: null, y: null });
-      if (newRelation && newRelation.sourceId) {
-        setNewRelation && setNewRelation(prev => ({
-          ...prev,
-          currentX: currentX,
-          currentY: currentY
-        }));
-      } else if (mode === 'select' && selectionBox) {
+      
+      // Update mouse position for temporary relation in any of the relation modes
+      if (((mode === 'addRelation' && relationCreationState.active) || 
+           mode === 'connectFromNodeMenu') && !draggedElement) {
+        setMousePosition({ x: currentX, y: currentY });
+      }
+      
+      if (mode === 'addRelation' && relationCreationState.active && !draggedElement) {
+        setRelationMouse({ x: currentX, y: currentY });
+      }
+      
+      if (mode === 'select' && selectionBox) {
         onSelectionMouseMove && onSelectionMouseMove(e);
       }
     }
@@ -363,7 +434,6 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
 
   // Enhance handleMouseUp to clear guides
   const handleMouseUp = (e) => {
-    // End panning if active
     if (isPanning) {
       handlePanEnd();
       return;
@@ -371,60 +441,85 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
 
     if (draggedElement) {
       setDraggedElement && setDraggedElement(null);
-    } else if (newRelation && newRelation.sourceId) {
+    } else if (connectFromNodeMenu && connectFromNodeMenu.sourceId) {
       const targetElement = e.target.closest('.condec-node');
       if (targetElement) {
         const targetId = targetElement.getAttribute('data-node-id');
-        if (targetId && targetId !== newRelation.sourceId) {
-          onRelationCreate && onRelationCreate(newRelation.sourceId, targetId);
+        if (targetId && targetId !== connectFromNodeMenu.sourceId) {
+          props.onRelationCreate && props.onRelationCreate(connectFromNodeMenu.sourceId, targetId);
         }
       }
-      setNewRelation && setNewRelation(null);
+      setConnectFromNodeMenu(null);
+      if (props.setMode) props.setMode('hand');
     } else if (mode === 'select' && selectionBox) {
       onSelectionMouseUp && onSelectionMouseUp(e);
     }
     setAlignmentGuides({ x: null, y: null });
   };
 
-  // Enhanced canvas mouse down handler to support panning
+  const handleCanvasClick = (e) => {
+    if (!e.target.classList.contains('condec-canvas')) {
+      return;
+    }
+    
+    if (relationCreationState.active) {
+      setRelationCreationState({
+        active: false,
+        sourceNode: null,
+        sourceId: null,
+        tempWaypoints: null
+      });
+      setRelationMouse(null);
+      return;
+    }
+    
+    if (relationCreationState.active || connectFromNodeMenu || mode === 'connectFromNodeMenu') {
+      setRelationCreationState({
+        active: false,
+        sourceNode: null,
+        sourceId: null
+      });
+      setRelationMouse(null);
+      setConnectFromNodeMenu(null);
+      if (props.setMode && mode === 'connectFromNodeMenu') {
+        props.setMode('hand');
+      }
+      return;
+    }
+    
+    if (mode === 'select') {
+      if (props.setMode) {
+        props.setMode('hand');
+      }
+      return;
+    }
+    
+    if (getConnectModeState().isActive) {
+      endConnectMode();
+      return;
+    }
+    
+    if (onCanvasClick) onCanvasClick(e);
+  };
+
   const handleCanvasMouseDown = (e) => {
     // Start panning if in hand mode and left mouse button is pressed
     if (mode === 'hand' && e.button === 0 && e.target.classList.contains('condec-canvas')) {
       handlePanStart(e);
       return;
     }
-    
     // Otherwise, delegate to the provided handler
-    if (onCanvasMouseDown) {
-      onCanvasMouseDown(e);
+    if (props.onCanvasMouseDown) {
+      props.onCanvasMouseDown(e);
     }
   };
 
-  const handleCanvasClick = (e) => {
-    if (connectFromNodeMenu) {
-      setConnectFromNodeMenu(null);
-      if (props.setMode) props.setMode('hand');
-      return;
-    }
-    if (getConnectModeState().isActive) {
-      endConnectMode();
-      // Optionally, reset mode or UI
-      return;
-    }
-    if (onCanvasClick) onCanvasClick(e);
-  };
-
-  // --- Relation waypoint handlers ---
   const handleWaypointDrag = (relationId, waypoints, updatedRelations) => {
     if (!relationId) return;
     
-    // If updatedRelations is provided (e.g., when dragging label), use that
     if (updatedRelations) {
-      // Create a merged list of relations, replacing only the updated one
       const mergedRelations = diagram.relations.map(rel => {
-        // Find if this relation is in updatedRelations
         const updatedRel = updatedRelations.find(r => r.id === rel.id);
-        // If found, use the updated version, otherwise keep the existing one
         return updatedRel || rel;
       });
       
@@ -432,15 +527,22 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
       return;
     }
     
-    // Otherwise, update only the waypoints
+    const relationToUpdate = diagram.relations.find(rel => rel.id === relationId);
+    if (!relationToUpdate) return;
+    
+    const updatedRelation = updateRelationWithFixedEndpoints(
+      relationToUpdate,
+      waypoints,
+      diagram
+    );
+    
     const updatedRelationsList = diagram.relations.map(rel => 
-      rel.id === relationId ? { ...rel, waypoints } : rel
+      rel.id === relationId ? updatedRelation : rel
     );
     
     onRelationEdit && onRelationEdit(updatedRelationsList);
   };
-  
-  // Enhance the handleWaypointDragEnd function to properly save label positions
+
   const handleWaypointDragEnd = (relationId, isLabelDrag = false) => {
     if (!relationId) return;
 
@@ -449,7 +551,6 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
       
       const relation = diagram.relations.find(r => r.id === relationId);
       if (relation) {
-        // Make sure we keep any updates to the relation
         const updatedRelations = diagram.relations.map(r => 
           r.id === relationId ? relation : r
         );
@@ -459,41 +560,41 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
     }
   };
 
-  const renderTemporaryRelation = () => {
-    if (!newRelation || !newRelation.sourceNode) return null;
-    // Convert source node position to canvas coordinates
-    const sourcePoint = { x: newRelation.sourceNode.x, y: newRelation.sourceNode.y };
-    // Get current mouse position as target
-    const targetPoint = { 
-      x: (newRelation.currentX - canvasOffset.x) / zoom, 
-      y: (newRelation.currentY - canvasOffset.y) / zoom 
-    };
-    const sourceEdgePoint = calculateIntersectionPoint(targetPoint, sourcePoint);
-    return (
-      <line
-        x1={sourceEdgePoint.x}
-        y1={sourceEdgePoint.y}
-        x2={targetPoint.x}
-        y2={targetPoint.y}
-        stroke="#1a73e8"
-        strokeWidth="1.5"
-        strokeDasharray="5,5"
-        markerEnd="url(#arrow)"
-        style={{ pointerEvents: 'none' }}
-      />
-    );
-  };
-
-  // Set cursor style based on current mode
   let cursorStyle = 'default';
   if (mode === 'hand') {
     cursorStyle = isPanning ? 'grabbing' : (draggedElement ? 'grabbing' : 'grab');
   } else if (mode === 'select') {
     cursorStyle = 'crosshair';
+  } else if (mode === 'addRelation') {
+    cursorStyle = relationCreationState.active ? 'crosshair' : 'pointer';
+  } else if (mode === 'connectFromNodeMenu') {
+    cursorStyle = connectFromNodeMenu ? 'crosshair' : 'pointer';
   }
 
   return (
     <div className="condec-canvas-container" style={{ flex: 1, position: 'relative' }}>
+      {(connectFromNodeMenu || relationCreationState.active) && (
+        <div 
+          style={{
+            position: 'absolute',
+            top: '10px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            backgroundColor: 'rgba(25, 118, 210, 0.8)',
+            color: 'white',
+            padding: '8px 12px',
+            borderRadius: '4px',
+            zIndex: 1000,
+            pointerEvents: 'none',
+            fontSize: '14px'
+          }}
+        >
+          {relationCreationState.active ? 
+            "Click on a target node to create relation or click on canvas to cancel" :
+            "Click on a target node to create relation or click on empty space to cancel"}
+        </div>
+      )}
+      
       <svg
         ref={svgRef}
         className="condec-canvas"
@@ -504,14 +605,12 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
         onMouseUp={handleMouseUp}
         onMouseDown={handleCanvasMouseDown}
         onWheel={onCanvasWheel}
-        onContextMenu={(e) => e.preventDefault()} // Prevent default context menu
+        onContextMenu={(e) => e.preventDefault()}
         style={{ cursor: cursorStyle, userSelect: 'none' }}
       >
-        {/* Use the RelationMarkers component from the utility */}
         <RelationMarkers />
 
         <g transform={`translate(${canvasOffset.x},${canvasOffset.y}) scale(${zoom})`}>
-          {/* Render alignment guides */}
           {alignmentGuides.x !== null && (
             <line
               x1={alignmentGuides.x}
@@ -536,10 +635,8 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
               pointerEvents="none"
             />
           )}
-          {/* Render diagram elements with z-index management */}
           {renderDiagramElements()}
           
-          {/* Render selection box if active */}
           {mode === 'select' && selectionBox && (
             <rect
               x={selectionBox.x}

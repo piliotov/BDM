@@ -135,6 +135,52 @@ export function updateRelationWaypoints(relation, diagram) {
 }
 
 /**
+ * Handle midpoint dragging while keeping endpoints fixed to nodes
+ * Uses the same algorithm as node dragging to ensure consistency
+ * @param {Object} relation Relation being updated
+ * @param {Array} waypoints Updated waypoints with moved midpoint
+ * @param {Object} diagram Current diagram
+ * @returns {Object} Updated relation with fixed endpoints
+ */
+export function updateRelationWithFixedEndpoints(relation, waypoints, diagram) {
+  const sourceNode = diagram.nodes.find(n => n.id === relation.sourceId);
+  const targetNode = diagram.nodes.find(n => n.id === relation.targetId);
+  
+  if (!sourceNode || !targetNode || waypoints.length < 2) {
+    return { ...relation, waypoints };
+  }
+
+  // Create a copy of waypoints to avoid mutating the input
+  const updatedWaypoints = [...waypoints];
+  
+  // Always use the same endpoint calculation that's used for node movement
+  // Exactly the same code as in updateRelationWaypoints function
+  
+  // Update source docking point using the same method as in updateRelationWaypoints
+  const sourceSize = { width: 100, height: 50 };
+  const secondPoint = updatedWaypoints[1];
+  updatedWaypoints[0] = getDockingPoint(
+    sourceNode, 
+    secondPoint,
+    sourceSize
+  );
+  
+  // Update target docking point using the same method as in updateRelationWaypoints
+  const targetSize = { width: 100, height: 50 };
+  const secondLastPoint = updatedWaypoints[updatedWaypoints.length - 2];
+  updatedWaypoints[updatedWaypoints.length - 1] = getDockingPoint(
+    targetNode,
+    secondLastPoint,
+    targetSize
+  );
+  
+  return {
+    ...relation,
+    waypoints: updatedWaypoints
+  };
+}
+
+/**
  * Recalculate all relations connected to a node after it is moved
  * @param {Object} node Node that was moved
  * @param {Object} diagram Current diagram

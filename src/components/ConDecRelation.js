@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { updateRelationWithFixedEndpoints } from '../utils/relationUtils';
 
 export function ConDecRelation({
   relation,
@@ -40,9 +41,26 @@ export function ConDecRelation({
     }
     // Otherwise calculate default waypoints
     else {
-      const startPoint = calculateIntersectionPoint(sourceNode, targetNode);
-      const endPoint = calculateIntersectionPoint(targetNode, sourceNode);
-      setCurrentWaypoints([startPoint, endPoint]);
+      // Fix: Use proper calculation that ensures points are on node boundaries
+      const mockDiagram = {
+        nodes: [sourceNode, targetNode],
+        relations: [relation]
+      };
+      
+      // Create initial waypoints - simple direct line
+      const directWaypoints = [
+        { x: sourceNode.x, y: sourceNode.y },
+        { x: targetNode.x, y: targetNode.y }
+      ];
+      
+      // Use the fixed endpoint calculation to ensure proper connection points
+      const updatedRelation = updateRelationWithFixedEndpoints(
+        relation,
+        directWaypoints,
+        mockDiagram
+      );
+      
+      setCurrentWaypoints(updatedRelation.waypoints);
     }
   }, [relation, sourceNode, targetNode, calculateIntersectionPoint]);
 
@@ -101,15 +119,24 @@ export function ConDecRelation({
       const newWaypoints = [...currentWaypoints];
       newWaypoints.splice(insertIndex, 0, { x: clickX, y: clickY });
       
-      setCurrentWaypoints(newWaypoints);
+      // Create a mock diagram for endpoint recalculation
+      const mockDiagram = {
+        nodes: [sourceNode, targetNode],
+        relations: [relation]
+      };
+      
+      // Use consistent endpoint calculation
+      const updatedRelation = updateRelationWithFixedEndpoints(
+        relation,
+        newWaypoints,
+        mockDiagram
+      );
+      
+      setCurrentWaypoints(updatedRelation.waypoints);
       
       // Update relation waypoints
       if (onWaypointDrag) {
-        const updatedRelation = {
-          ...relation,
-          waypoints: newWaypoints
-        };
-        onWaypointDrag(relation.id, newWaypoints, [updatedRelation]);
+        onWaypointDrag(relation.id, updatedRelation.waypoints, [updatedRelation]);
         if (onWaypointDragEnd) {
           onWaypointDragEnd(relation.id);
         }
@@ -157,18 +184,33 @@ export function ConDecRelation({
       const x = (svgPoint.x - canvasOffset.x) / zoom;
       const y = (svgPoint.y - canvasOffset.y) / zoom;
       
-      // Update waypoints
-      const newWaypoints = [...currentWaypoints];
-      newWaypoints[draggedPoint] = { x, y };
-      setCurrentWaypoints(newWaypoints);
-      
-      // Notify parent component
-      if (onWaypointDrag) {
-        const updatedRelation = {
-          ...relation,
-          waypoints: newWaypoints
+      // Update waypoints - important: we can only move interior points
+      // The endpoints must always be calculated the same way as in updateRelationWaypoints
+      if (draggedPoint > 0 && draggedPoint < currentWaypoints.length - 1) {
+        // Only update the interior point being dragged
+        const newWaypoints = [...currentWaypoints];
+        newWaypoints[draggedPoint] = { x, y };
+        
+        // Create a mock diagram with source and target nodes for endpoint recalculation
+        const mockDiagram = {
+          nodes: [sourceNode, targetNode],
+          relations: [relation]
         };
-        onWaypointDrag(relation.id, newWaypoints, [updatedRelation]);
+        
+        // Always use the same function for endpoint recalculation
+        const updatedRelation = updateRelationWithFixedEndpoints(
+          relation, 
+          newWaypoints, 
+          mockDiagram
+        );
+        
+        // Update component state with properly calculated waypoints
+        setCurrentWaypoints(updatedRelation.waypoints);
+        
+        // Notify parent component
+        if (onWaypointDrag) {
+          onWaypointDrag(relation.id, updatedRelation.waypoints, [updatedRelation]);
+        }
       }
     };
     
@@ -187,10 +229,9 @@ export function ConDecRelation({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDragging, draggedPoint, currentWaypoints, relation, onWaypointDrag, onWaypointDragEnd, canvasOffset, zoom]);
+  }, [isDragging, draggedPoint, currentWaypoints, relation, onWaypointDrag, onWaypointDragEnd, canvasOffset, zoom, sourceNode, targetNode]);
 
   // --- Make relation label draggable ---
-  // Mouse down on label to start dragging
   const handleLabelMouseDown = (e) => {
     if (!isSelected) return;
     e.stopPropagation();
@@ -203,9 +244,10 @@ export function ConDecRelation({
     saveToUndoStack && saveToUndoStack();
   };
 
-  // Drag label: move all waypoints by delta
+  // Drag label: update all interior points while keeping endpoints fixed
   useEffect(() => {
     if (!isLabelDragging) return;
+    
     const handleMouseMove = (e) => {
       // Calculate new label center in canvas coordinates
       const svg = document.querySelector('svg.condec-canvas');
@@ -213,27 +255,50 @@ export function ConDecRelation({
       const rect = svg.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
+      
       // Convert to diagram coordinates
       const newLabelX = (mouseX - canvasOffset.x) / zoom;
       const newLabelY = (mouseY - canvasOffset.y) / zoom;
+      
       // Calculate delta from current label position
       const dx = newLabelX - midPoint.x;
       const dy = newLabelY - midPoint.y;
-      // Move all waypoints by delta
-      const newWaypoints = currentWaypoints.map(pt => ({
-        x: pt.x + dx,
-        y: pt.y + dy
-      }));
-      setCurrentWaypoints(newWaypoints);
-      // Notify parent
-      if (onWaypointDrag) {
-        const updatedRelation = {
-          ...relation,
-          waypoints: newWaypoints
+      
+      // Move only interior waypoints by delta - keep endpoints calculation consistent
+      if (currentWaypoints.length >= 2) {
+        const newWaypoints = [...currentWaypoints];
+        
+        // Only move interior points (not endpoints)
+        for (let i = 1; i < newWaypoints.length - 1; i++) {
+          newWaypoints[i] = {
+            x: newWaypoints[i].x + dx,
+            y: newWaypoints[i].y + dy
+          };
+        }
+        
+        // Create a mock diagram for endpoint recalculation
+        const mockDiagram = {
+          nodes: [sourceNode, targetNode],
+          relations: [relation]
         };
-        onWaypointDrag(relation.id, newWaypoints, [updatedRelation]);
+        
+        // Use the same function for endpoint calculation
+        const updatedRelation = updateRelationWithFixedEndpoints(
+          relation,
+          newWaypoints,
+          mockDiagram
+        );
+        
+        // Update with properly calculated waypoints
+        setCurrentWaypoints(updatedRelation.waypoints);
+        
+        // Notify parent
+        if (onWaypointDrag) {
+          onWaypointDrag(relation.id, updatedRelation.waypoints, [updatedRelation]);
+        }
       }
     };
+    
     const handleMouseUp = () => {
       setIsLabelDragging(false);
       setLabelDragOffset({ x: 0, y: 0 });
@@ -241,13 +306,15 @@ export function ConDecRelation({
         onWaypointDragEnd(relation.id, true);
       }
     };
+    
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
+    
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isLabelDragging, midPoint, currentWaypoints, relation, onWaypointDrag, onWaypointDragEnd, canvasOffset, zoom]);
+  }, [isLabelDragging, midPoint, currentWaypoints, relation, onWaypointDrag, onWaypointDragEnd, canvasOffset, zoom, sourceNode, targetNode]);
 
   // Helper to handle relation click
   const handleRelationClick = (e) => {
