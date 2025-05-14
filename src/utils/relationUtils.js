@@ -201,6 +201,41 @@ export function getRelationVisual(relationType, isSelected) {
 }
 
 /**
+ * Get a human-friendly label for a relation type
+ * @param {string} relationType
+ * @returns {string}
+ */
+export function getRelationLabel(relationType) {
+  // Remove neg_, alt_, chain_ prefixes for base label
+  let neg = relationType.startsWith('neg_');
+  let rest = neg ? relationType.slice(4) : relationType;
+  let prefix = '';
+  if (rest.startsWith('alt_')) {
+    prefix = 'Alt ';
+    rest = rest.slice(4);
+  } else if (rest.startsWith('chain_')) {
+    prefix = 'Chain ';
+    rest = rest.slice(6);
+  }
+  // Map base type to label
+  const baseLabels = {
+    resp_existence: 'Resp. Existence',
+    coexistence: 'Coexistence',
+    response: 'Response',
+    precedence: 'Precedence',
+    succession: 'Succession',
+    resp_absence: 'Resp. Absence',
+    not_coexistence: 'Not Coexistence',
+  };
+  // Fallback: capitalize and replace _ with space
+  let base = baseLabels[rest] || (rest.charAt(0).toUpperCase() + rest.slice(1).replace(/_/g, ' '));
+  if (neg || relationType === 'not_coexistence' || relationType === 'resp_absence') {
+    return `¬${prefix}${base}`;
+  }
+  return `${prefix}${base}`;
+}
+
+/**
  * Function to check if a relation is allowed
  * @param {Object} diagram Current diagram
  * @param {string} sourceId Source node ID

@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { generatePath } from '../utils/geometryUtils';
 import { getRelationVisual } from '../utils/relationUtils';
 import { getRelationMarkerIds } from '../utils/relationIconUtils';
+// Add import for label helper
+import { getRelationLabel } from '../utils/relationUtils';
 
 // Export relations types for backward compatibility
 export { RELATION_TYPES } from '../utils/relationUtils';
@@ -24,6 +26,12 @@ export function ConDecRelation({
   const [isDraggingLabel, setIsDraggingLabel] = useState(false);
   const [labelOffset, setLabelOffset] = useState(relation.labelOffset || { x: 0, y: 0 });
   
+  // Use getRelationLabel to get a human-friendly label
+  const relationLabel = getRelationLabel(relation.type);
+
+  // Store drag offset in a ref so it persists across renders
+  const dragOffsetRef = React.useRef(null);
+
   // Calculate initial waypoints when relation or nodes change
   useEffect(() => {
     if (!sourceNode || !targetNode) return;
@@ -112,13 +120,10 @@ export function ConDecRelation({
   useEffect(() => {
     if (!isDraggingLabel) return;
 
-    // Store the offset between mouse and label center at drag start
-    let dragOffset = null;
-
     const handleLabelDrag = (e) => {
       e.stopPropagation();
 
-      const svg = e.target.closest('svg') || document.querySelector('svg.condec-canvas');
+      const svg = document.querySelector('svg.condec-canvas');
       if (!svg) return;
 
       const point = svg.createSVGPoint();
@@ -126,18 +131,18 @@ export function ConDecRelation({
       point.y = e.clientY;
       const svgPoint = point.matrixTransform(svg.getScreenCTM().inverse());
 
-      // On first move, calculate dragOffset
-      if (!dragOffset) {
-        dragOffset = {
+      // On first move, calculate dragOffset and store in ref
+      if (dragOffsetRef.current === null) {
+        dragOffsetRef.current = {
           x: svgPoint.x - labelX,
           y: svgPoint.y - labelY
         };
       }
 
-      // Calculate new offset from midpoint, keeping the drag offset
+      // Calculate new offset from midpoint, keeping the initial drag offset
       const newOffset = {
-        x: ((svgPoint.x - dragOffset.x) - midPoint.x),
-        y: ((svgPoint.y - dragOffset.y) - midPoint.y)
+        x: (svgPoint.x - dragOffsetRef.current.x) - midPoint.x,
+        y: (svgPoint.y - dragOffsetRef.current.y) - midPoint.y
       };
 
       setLabelOffset(newOffset);
@@ -154,6 +159,7 @@ export function ConDecRelation({
     const handleLabelDragEnd = (e) => {
       e.stopPropagation();
       setIsDraggingLabel(false);
+      dragOffsetRef.current = null;
       if (onWaypointDragEnd) {
         onWaypointDragEnd(relation.id, true);
       }
@@ -166,7 +172,19 @@ export function ConDecRelation({
       window.removeEventListener('mousemove', handleLabelDrag);
       window.removeEventListener('mouseup', handleLabelDragEnd);
     };
-  }, [isDraggingLabel, relation, currentWaypoints, canvasOffset, zoom, onWaypointDrag, onWaypointDragEnd, labelX, labelY, midPoint]);
+  }, [
+    isDraggingLabel,
+    relation,
+    currentWaypoints,
+    canvasOffset,
+    zoom,
+    onWaypointDrag,
+    onWaypointDragEnd,
+    midPoint.x,
+    midPoint.y,
+    labelX,
+    labelY
+  ]);
   
   // Early return if we don't have the necessary data
   if (!sourceNode || !targetNode || currentWaypoints.length < 2) {
@@ -431,19 +449,23 @@ export function ConDecRelation({
   // When rendering the relation label, offset it a few pixels up from the path
   function renderRelationLabel(relation, midPoint, zoom) {
     // Offset label 10px up (in SVG coordinates, so divide by zoom)
-    const labelYOffset = -10 / zoom;
+    // But font size and rect size should NOT scale with zoom
+    const labelYOffset = -10; // px, not divided by zoom
     return (
       <text
         x={labelX}
         y={labelY + labelYOffset}
-        fontSize={`${12 / zoom}px`}
+        fontSize="14px"
         textAnchor="middle"
         dominantBaseline="middle"
         fill={style.stroke}
         fontWeight={isSelected ? "bold" : "normal"}
         pointerEvents="none"
+        style={{
+          userSelect: "none"
+        }}
       >
-        {relation.type}
+        {relationLabel}
       </text>
     );
   }
@@ -562,42 +584,6 @@ export function ConDecRelation({
         );
       })()}
 
-      {/* Draggable Label */}
-      <g 
-        className="condec-relation-label" 
-        cursor={isSelected ? "move" : "pointer"}
-        onMouseDown={isSelected ? handleLabelMouseDown : handleRelationClick}
-        pointerEvents="all"
-      >
-        {/* Background rect for easier selection - make it more visible when selected */}
-        <rect
-          x={labelX - 40}
-          y={labelY - 10}
-          width={80} 
-          height={20}
-          fill={isSelected ? "rgba(255,255,255,0.7)" : "transparent"}
-          stroke={isSelected ? "#1a73e8" : "transparent"}
-          strokeWidth={isSelected ? 1/zoom : 0}
-          strokeDasharray={isSelected ? `${2/zoom},${1/zoom}` : "0"}
-          rx={4/zoom}
-          ry={4/zoom}
-          pointerEvents="all"
-        />
-        {/* Add a small drag handle indicator when selected */}
-        {isSelected && (
-          <g transform={`translate(${labelX}, ${labelY - 15})`} pointerEvents="none">
-            <path 
-              d="M-15,0 H15 M-15,3 H15 M-15,6 H15" 
-              stroke="#1a73e8" 
-              strokeWidth={1.5/zoom}
-              strokeLinecap="round"
-              opacity={0.8}
-            />
-          </g>
-        )}
-        {renderRelationLabel(relation, midPoint, zoom)}
-      </g>
-  
       {/* Control points - only visible when selected */}
       {isSelected && currentWaypoints.map((point, index) => (
         <rect
@@ -636,6 +622,31 @@ export function ConDecRelation({
           />
         );
       })}
+
+      {/* --- MOVE LABEL GROUP TO THE END SO IT IS ON TOP --- */}
+      {/* Draggable Label */}
+      <g 
+        className="condec-relation-label" 
+        cursor={isSelected ? "move" : "pointer"}
+        onMouseDown={isSelected ? handleLabelMouseDown : handleRelationClick}
+        pointerEvents="all"
+      >
+        {/* Background rect for easier selection - fixed size, not scaled by zoom */}
+        <rect
+          x={labelX - 40}
+          y={labelY - 14}
+          width={80} 
+          height={28}
+          fill={isSelected ? "rgba(255,255,255,0.7)" : "transparent"}
+          stroke={isSelected ? "#1a73e8" : "transparent"}
+          strokeWidth={isSelected ? 1 : 0}
+          strokeDasharray={isSelected ? "2,1" : "0"}
+          rx={4}
+          ry={4}
+          pointerEvents="all"
+        />
+        {renderRelationLabel(relation, midPoint, zoom)}
+      </g>
     </g>
   );
 }

@@ -159,9 +159,6 @@ export function createManhattanWaypoints(
   const sourceDock = getDockingPoint(source, target, sourceSize);
   const targetDock = getDockingPoint(target, source, targetSize);
 
-  // Get direction from source to target
-  const mainDirection = getDirection(sourceDock, targetDock);
-
   // Get horizontal and vertical distance
   const dx = targetDock.x - sourceDock.x;
   const dy = targetDock.y - sourceDock.y;
