@@ -26,7 +26,8 @@ export function ConDecNode({
   onRename,
   onRenameBlur
 }) {
-  const [editing, setEditing] = useState(false);
+  // Use node.editing to control initial editing state
+  const [editing, setEditing] = useState(!!node.editing);
   const [editValue, setEditValue] = useState(node.name);
   const inputRef = useRef();
 
@@ -65,10 +66,24 @@ export function ConDecNode({
     }
   }, [editing]);
 
-  // When node changes, reset edit value
+  // When node changes, reset edit value and editing state if node.editing is set
   useEffect(() => {
     setEditValue(node.name);
-  }, [node.name]);
+    if (node.editing) setEditing(true);
+  }, [node.name, node.editing]);
+
+  // Helper to finish editing and update name
+  const finishEditing = () => {
+    setEditing(false);
+    if (editValue.trim() && editValue !== node.name) {
+      // Pass a second argument to signal editing should be cleared
+      onRename(editValue.trim(), true);
+    } else if (node.editing) {
+      // If editing flag is set but name didn't change, still clear editing
+      onRename(node.name, true);
+    }
+    if (onRenameBlur) onRenameBlur();
+  };
 
   const width = 100;
   const height = 50;
@@ -182,7 +197,7 @@ export function ConDecNode({
       {editing ? (
         <foreignObject
           x={x - width/2}
-          y={y + height/2 + 2}
+          y={y - height/2 + 12}
           width={width}
           height={30}
         >
@@ -198,25 +213,19 @@ export function ConDecNode({
               borderRadius: '3px'
             }}
             onChange={e => setEditValue(e.target.value)}
-            onBlur={() => {
-              setEditing(false);
-              if (editValue.trim() && editValue !== node.name) {
-                onRename(editValue);
-              }
-              if (onRenameBlur) onRenameBlur();
-            }}
+            onBlur={finishEditing}
             onKeyDown={e => {
               if (e.key === 'Enter') {
-                setEditing(false);
-                if (editValue.trim() && editValue !== node.name) {
-                  onRename(editValue);
-                }
-                if (onRenameBlur) onRenameBlur();
+                finishEditing();
               }
               if (e.key === 'Escape') {
                 setEditing(false);
                 setEditValue(node.name);
                 if (onRenameBlur) onRenameBlur();
+                // Optionally clear editing flag if present
+                if (node.editing) {
+                  onRename(node.name, true);
+                }
               }
             }}
           />

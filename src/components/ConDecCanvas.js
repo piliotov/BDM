@@ -154,7 +154,28 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
             onDoubleClick={() => {}}
             onDragStart={e => handleNodeInteractionStart(node.id, e)}
             onMenu={null}
-            onRename={name => onNodeRename(node.id, name)}
+            onRename={(newName, clearEditing) => {
+              if (clearEditing) {
+                const updatedNodes = diagram.nodes.map(n =>
+                  n.id === node.id
+                    ? { ...n, name: newName, editing: undefined }
+                    : n
+                );
+                if (typeof props.onNodeEdit === 'function') {
+                  props.onNodeEdit(updatedNodes);
+                }
+              } else {
+                // Just update name
+                const updatedNodes = diagram.nodes.map(n =>
+                  n.id === node.id
+                    ? { ...n, name: newName }
+                    : n
+                );
+                if (typeof props.onNodeEdit === 'function') {
+                  props.onNodeEdit(updatedNodes);
+                }
+              }
+            }}
             onRenameBlur={() => {}}
           />
         </React.Fragment>

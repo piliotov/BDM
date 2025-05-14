@@ -26,11 +26,12 @@ export function addNode(e, mode, diagram, canvasOffset, zoom, saveToUndoStack) {
   const newNode = {
     id: `activity_${Date.now()}`,
     type: NODE_TYPES.ACTIVITY,
-    name: `Activity ${diagram.nodes.length + 1}`,
+    name: '', // Spawn with empty name
     x,
     y,
     constraint: null,
-    constraintValue: null
+    constraintValue: null,
+    editing: true 
   };
 
   saveToUndoStack();
