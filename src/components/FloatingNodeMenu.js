@@ -1,7 +1,5 @@
 import React from 'react';
 
-// Minimal BPMN-style context pad (floating round buttons)
-const ICON_SIZE = 22;
 
 // Define icons for edit, delete, and append actions
 const EditIcon = (
@@ -21,58 +19,22 @@ const ACTION_ICONS = {
   edit: { icon: EditIcon, color: '#1976d2', title: 'Edit' },
   append: { icon: AppendIcon, color: '#43a047', title: 'Append Activity' },
   delete: { icon: DeleteIcon, color: '#d32f2f', title: 'Delete' },
-  // Add more actions/icons as needed
+
 };
 
-// Helper function to validate constraints
-function validateNodeConstraints(node, diagram = { relations: [] }) {
-  const incomingRelations = diagram.relations.filter(r => r.targetId === node.id).length;
-  const outgoingRelations = diagram.relations.filter(r => r.sourceId === node.id).length;
 
-  switch (node.constraint) {
-    case 'absence':
-      return incomingRelations === 0
-        ? { valid: true }
-        : { valid: false, message: 'Must have no incoming relations' };
 
-    case 'absence_n':
-      return incomingRelations <= (node.constraintValue || 0)
-        ? { valid: true }
-        : { valid: false, message: `Exceeds max ${node.constraintValue} incoming relations` };
-
-    case 'existence_n':
-      return incomingRelations >= (node.constraintValue || 0)
-        ? { valid: true }
-        : { valid: false, message: `Needs at least ${node.constraintValue} incoming relations` };
-
-    case 'exactly_n':
-      return incomingRelations === (node.constraintValue || 0)
-        ? { valid: true }
-        : { valid: false, message: `Must have exactly ${node.constraintValue} incoming relations` };
-
-    case 'init':
-      return incomingRelations === 0
-        ? { valid: true }
-        : { valid: false, message: 'Init activities cannot have incoming relations' };
-
-    default:
-      return { valid: true };
-  }
-}
-
-// --- Main Node Menu (without wrench button and type menu) ---
+// --- Main Node Menu ---
 export function ConDecNodeMenu({
   node,
   diagram = { relations: [] },
   onEdit,
   onDelete,
   onAppend,
-  onClose,
   zoom = 1
 }) {
   if (!node) return null;
 
-  // Remove error message and text, keep only buttons
   const actions = Object.entries(ACTION_ICONS);
 
   const ICON_SIZE = 22;

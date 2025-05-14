@@ -89,7 +89,7 @@ export function NodeEditMenu({
     });
   };
 
-  // Get constraint validation status (use utility for actual diagram check)
+  // Get constraint validation status
   const getConstraintStatus = () => {
     if (!node || !node.id || !window?.condecDiagramForValidation) return { valid: true };
     const diagram = window.condecDiagramForValidation;

@@ -1,15 +1,14 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import '../styles/ConDecModeler.css';
-import '../styles/ModelerButtons.css'; // <-- Add this import
+import '../styles/ModelerButtons.css';
 import { ConDecCanvas } from './ConDecCanvas';
 import { snapNodeDuringDrag } from '../utils/gridUtil';
-import { initialDiagram, diagramToXML, CONSTRAINTS, xmlToDiagram } from '../utils/diagramUtils';
+import { initialDiagram, diagramToXML, xmlToDiagram } from '../utils/diagramUtils';
 import { isRelationAllowed, RELATION_TYPES } from '../utils/relationUtils';
 import { addNode, handleNodeRename as utilHandleNodeRename } from '../utils/nodeUtils';
 import { appendActivityAndConnect } from '../utils/append-action';
 import RelationEditMenu from './RelationEditMenu';
-import { ConDecNodeMenu } from './FloatingNodeMenu'; // Fix import
-import { NodeEditMenu } from './NodeEditMenu'; // Fix import
+import { NodeEditMenu } from './NodeEditMenu';
 
 // Constants for local storage
 const LOCAL_STORAGE_KEY = 'condec-diagram';
@@ -38,8 +37,8 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
   // Calculate the center offset based on window size
   const [canvasOffset, setCanvasOffset] = useState({ x: 0, y: 0 });
 
-  // Ref for node edit popup to detect outside clicks
-  const nodeEditPopupRef = useRef(null);
+  // Ref for canvas SVG to compute node screen position
+  const canvasRef = useRef(null);
 
   // Ensure the modeler always fills its parent or viewport if used standalone
   const wrapperStyle = {
@@ -731,6 +730,7 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
         height: '100%'
       }}>
         <ConDecCanvas
+          ref={canvasRef}
           diagram={diagram}
           selectedElement={selectedElement}
           mode={mode}
@@ -770,31 +770,7 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
           onNodeDrag={handleNodeDrag}
           onAppend={handleAppendActivity}
         />
-        {/* --- Render floating node menu for selected node --- */}
-        {selectedElement && selectedElement.type === 'node' && !selectedElement.multiSelect && (
-          <div
-            style={{
-              position: 'absolute',
-              left: `${selectedElement.element.x * zoom + canvasOffset.x + 60}px`,
-              top: `${selectedElement.element.y * zoom + canvasOffset.y - 11}px`,
-              pointerEvents: 'auto',
-              zIndex: 2000
-            }}
-          >
-            <ConDecNodeMenu
-              node={selectedElement.element}
-              diagram={diagram}
-              onEdit={(node) => {
-                setEditNodePopup({ node: { ...node } });
-                setEditNodePopupPos({ x: null, y: null });
-              }}
-              onDelete={handleDelete}
-              onAppend={handleAppendActivity}
-              onClose={() => setSelectedElement(null)}
-              zoom={zoom}
-            />
-          </div>
-        )}
+{/* --- Render floating node menu for selected node --- */}
         {/* --- Render node edit popup if editing a node --- */}
         {editNodePopup && (
           <NodeEditMenu

@@ -1,57 +1,54 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import { ConDecRelation } from './ConDecRelations';
 import { ConDecNode } from './ConDecNode';
+import { ConDecNodeMenu } from './FloatingNodeMenu'; // <-- Add this import
 import { calculateIntersectionPoint } from '../utils/geometryUtils';
 import { useCanvasPanning } from '../utils/canvasUtils';
 import { updateRelationsForNode } from '../utils/relationUtils';
 import { RelationMarkers } from '../utils/relationIconUtils';
 
-export function ConDecCanvas({
-  diagram,
-  selectedElement,
-  mode,
-  onSelectElement,
-  onNodeRename,
-  onRelationCreate,
-  onNodeEdit,
-  onRelationEdit,
-  newRelation,
-  setNewRelation,
-  mousePosition,
-  setMousePosition,
-  draggedElement,
-  setDraggedElement,
-  onCanvasClick,
-  canvasOffset = { x: 0, y: 0 },
-  setCanvasOffset, // New prop for updating canvas offset
-  onCanvasMouseDown,
-  onSelectionMouseMove,
-  onSelectionMouseUp,
-  zoom = 1,
-  onCanvasWheel,
-  selectionBox,
-  onNodeMenuEdit,
-  onNodeMenuDelete,
-  onNodeMenuClose,
-  onAppend, // <-- add this prop
-  onNodeMenuEditButton, // <-- new prop
-  // New panning state props
-  isPanning = false,
-  setIsPanning,
-  panStart = { x: 0, y: 0 },
-  setPanStart,
-  panOrigin = { x: 0, y: 0 },
-  setPanOrigin,
-  onNodeDrag,
-  onNodeContextMenu,
-  multiSelectedNodes = [],
-  setMultiSelectedNodes,
-  renderMultiSelectBoundingBox,
-  renderMultiSelectMenu,
-  saveToUndoStack, // Added this prop
-}) {
+export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
+  const {
+    diagram,
+    selectedElement,
+    mode,
+    onSelectElement,
+    onNodeRename,
+    onRelationCreate,
+    onNodeEdit,
+    onRelationEdit,
+    newRelation,
+    setNewRelation,
+    setMousePosition,
+    draggedElement,
+    setDraggedElement,
+    onCanvasClick,
+    canvasOffset = { x: 0, y: 0 },
+    setCanvasOffset,
+    onCanvasMouseDown,
+    onSelectionMouseMove,
+    onSelectionMouseUp,
+    zoom = 1,
+    onCanvasWheel,
+    selectionBox,
+    isPanning = false,
+    setIsPanning,
+    panStart = { x: 0, y: 0 },
+    setPanStart,
+    panOrigin = { x: 0, y: 0 },
+    setPanOrigin,
+    multiSelectedNodes = [],
+    renderMultiSelectBoundingBox,
+    renderMultiSelectMenu,
+    saveToUndoStack,
+  } = props;
+
+  // Always call useRef
   const svgRef = useRef();
-  // Add state for alignment guides
+
+  // Forward the ref if provided
+  useImperativeHandle(ref, () => svgRef.current, []);
+
   const [alignmentGuides, setAlignmentGuides] = useState({ x: null, y: null });
 
   // Set up canvas panning functionality
@@ -66,7 +63,6 @@ export function ConDecCanvas({
 
   // --- Node drag/relation logic ---
   const handleNodeInteractionStart = (nodeId, e) => {
-    // Only handle drag or relation creation
     if (mode === 'addRelation') {
       const sourceNode = diagram.nodes.find(n => n.id === nodeId);
       setNewRelation({
@@ -92,40 +88,33 @@ export function ConDecCanvas({
   const renderDiagramElements = () => {
     if (!diagram || !diagram.nodes || !diagram.relations) return null;
     
-    // Create a copy of nodes and relations to sort by z-index
     const nodes = [...diagram.nodes];
     const relations = [...diagram.relations];
     
-    // Determine selected element IDs
     const selectedNodeId = selectedElement?.type === 'node' ? selectedElement.element.id : null;
     const selectedRelationId = selectedElement?.type === 'relation' ? selectedElement.element.id : null;
     
-    // Sort relations to render selected ones on top
     relations.sort((a, b) => {
-      if (a.id === selectedRelationId) return 1; // Selected relation on top
+      if (a.id === selectedRelationId) return 1; 
       if (b.id === selectedRelationId) return -1;
-      return 0; // Keep original order for others
+      return 0;
     });
     
-    // Sort nodes to render selected ones on top
     nodes.sort((a, b) => {
-      if (a.id === selectedNodeId) return 1; // Selected node on top
+      if (a.id === selectedNodeId) return 1; 
       if (b.id === selectedNodeId) return -1;
-      return 0; // Keep original order for others
+      return 0;
     });
     
-    // Render relations first (they should be behind nodes)
     const relationElements = relations.map(relation => {
       const sourceNode = nodes.find(n => n.id === relation.sourceId);
       const targetNode = nodes.find(n => n.id === relation.targetId);
       if (!sourceNode || !targetNode) return null;
       
-      // Do not show relation menu if multi-select is active
       const isSelected = !multiSelectedNodes.length && selectedElement &&
         selectedElement.type === 'relation' &&
         selectedElement.element.id === relation.id;
       
-      // Make sure to pass all necessary props to ConDecRelation
       return (
         <ConDecRelation
           key={relation.id}
@@ -147,9 +136,7 @@ export function ConDecCanvas({
       );
     });
     
-    // Then render nodes (they should be on top of relations)
     const nodeElements = nodes.map(node => {
-      // Do not show node menu if multi-select is active
       const isSelected = !multiSelectedNodes.length && selectedElement &&
         selectedElement.type === 'node' &&
         selectedElement.element.id === node.id;
@@ -174,7 +161,29 @@ export function ConDecCanvas({
       );
     });
 
-    // Render temporary relation if creating a new one
+    // --- Render floating menu for selected node (if not multi-selected) ---
+    let nodeMenu = null;
+    if (
+      selectedElement &&
+      selectedElement.type === 'node' &&
+      (!multiSelectedNodes || !multiSelectedNodes.length)
+    ) {
+      const node = nodes.find(n => n.id === selectedElement.element.id);
+      if (node) {
+        nodeMenu = (
+          <ConDecNodeMenu
+            node={node}
+            diagram={diagram}
+            onEdit={props.onNodeMenuEdit}
+            onDelete={props.onNodeMenuDelete}
+            onAppend={props.onAppend}
+            onClose={props.onNodeMenuClose}
+            zoom={zoom}
+          />
+        );
+      }
+    }
+
     const temporaryRelation = newRelation && renderTemporaryRelation();
     
     return (
@@ -182,6 +191,7 @@ export function ConDecCanvas({
         {relationElements}
         {temporaryRelation}
         {nodeElements}
+        {nodeMenu}
         {/* Render blue bounding box for multi-select */}
         {renderMultiSelectBoundingBox && renderMultiSelectBoundingBox()}
         {/* Render floating menu for multi-select */}
@@ -443,4 +453,4 @@ export function ConDecCanvas({
       </svg>
     </div>
   );
-}
+});
