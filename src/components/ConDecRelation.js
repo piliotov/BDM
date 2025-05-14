@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { updateRelationWithFixedEndpoints } from '../utils/relationUtils';
+import { updateRelationWithFixedEndpoints, updateRelationWaypoints } from '../utils/relationUtils';
 
 export function ConDecRelation({
   relation,
@@ -34,35 +34,25 @@ export function ConDecRelation({
   // Update waypoints when relation changes
   useEffect(() => {
     if (!relation || !sourceNode || !targetNode) return;
-    
-    // If waypoints exist, use them
-    if (relation.waypoints && relation.waypoints.length > 0) {
-      setCurrentWaypoints(relation.waypoints);
-    }
-    // Otherwise calculate default waypoints
-    else {
-      // Fix: Use proper calculation that ensures points are on node boundaries
-      const mockDiagram = {
-        nodes: [sourceNode, targetNode],
-        relations: [relation]
-      };
-      
-      // Create initial waypoints - simple direct line
-      const directWaypoints = [
+
+    // Always use updateRelationWaypoints (manhattan logic) for endpoint calculation,
+    // even if there are custom waypoints/midpoints.
+    // This ensures endpoints are always on the node boundary and never inside.
+    const mockDiagram = {
+      nodes: [sourceNode, targetNode],
+      relations: [relation]
+    };
+
+    // This function will update endpoints using the same logic as node movement.
+    const updatedRelation = updateRelationWaypoints(
+      { ...relation, waypoints: relation.waypoints || [
         { x: sourceNode.x, y: sourceNode.y },
         { x: targetNode.x, y: targetNode.y }
-      ];
-      
-      // Use the fixed endpoint calculation to ensure proper connection points
-      const updatedRelation = updateRelationWithFixedEndpoints(
-        relation,
-        directWaypoints,
-        mockDiagram
-      );
-      
-      setCurrentWaypoints(updatedRelation.waypoints);
-    }
-  }, [relation, sourceNode, targetNode, calculateIntersectionPoint]);
+      ] },
+      mockDiagram
+    );
+    setCurrentWaypoints(updatedRelation.waypoints);
+  }, [relation, sourceNode, targetNode]);
 
   // Handle waypoint drag start - add ability to add anchor points by clicking on the path
   const handleWaypointMouseDown = (e, index) => {
@@ -170,7 +160,8 @@ export function ConDecRelation({
     const handleMouseMove = (e) => {
       if (!currentWaypoints) return;
       
-      const svg = e.target.closest('svg') || document.querySelector('svg.condec-canvas');
+      // Always select the SVG directly to avoid errors when e.target is not an element
+      const svg = document.querySelector('svg.condec-canvas');
       if (!svg) return;
       
       // Get SVG coordinates by converting client coordinates
@@ -184,30 +175,24 @@ export function ConDecRelation({
       const x = (svgPoint.x - canvasOffset.x) / zoom;
       const y = (svgPoint.y - canvasOffset.y) / zoom;
       
-      // Update waypoints - important: we can only move interior points
-      // The endpoints must always be calculated the same way as in updateRelationWaypoints
+      // Update waypoints - only move interior points, endpoints will be recalculated by updateRelationWithFixedEndpoints
       if (draggedPoint > 0 && draggedPoint < currentWaypoints.length - 1) {
-        // Only update the interior point being dragged
         const newWaypoints = [...currentWaypoints];
         newWaypoints[draggedPoint] = { x, y };
-        
-        // Create a mock diagram with source and target nodes for endpoint recalculation
+
+        // Do NOT set endpoints to node centers here. Let the utility recalculate endpoints.
+        // Use updateRelationWithFixedEndpoints to recalculate endpoints with manhattan logic
         const mockDiagram = {
           nodes: [sourceNode, targetNode],
           relations: [relation]
         };
-        
-        // Always use the same function for endpoint recalculation
         const updatedRelation = updateRelationWithFixedEndpoints(
-          relation, 
-          newWaypoints, 
+          relation,
+          newWaypoints,
           mockDiagram
         );
-        
-        // Update component state with properly calculated waypoints
         setCurrentWaypoints(updatedRelation.waypoints);
-        
-        // Notify parent component
+
         if (onWaypointDrag) {
           onWaypointDrag(relation.id, updatedRelation.waypoints, [updatedRelation]);
         }

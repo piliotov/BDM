@@ -111,7 +111,7 @@ export function updateRelationWaypoints(relation, diagram) {
   const updatedWaypoints = [...relation.waypoints];
   
   // Update source docking point
-  const sourceSize = { width: 100, height: 50 };
+  const sourceSize = { width: sourceNode.width || 100, height: sourceNode.height || 50 };
   const secondPoint = updatedWaypoints[1];
   updatedWaypoints[0] = getDockingPoint(
     sourceNode, 
@@ -120,7 +120,7 @@ export function updateRelationWaypoints(relation, diagram) {
   );
   
   // Update target docking point
-  const targetSize = { width: 100, height: 50 };
+  const targetSize = { width: targetNode.width || 100, height: targetNode.height || 50 };
   const secondLastPoint = updatedWaypoints[updatedWaypoints.length - 2];
   updatedWaypoints[updatedWaypoints.length - 1] = getDockingPoint(
     targetNode,
@@ -154,10 +154,8 @@ export function updateRelationWithFixedEndpoints(relation, waypoints, diagram) {
   const updatedWaypoints = [...waypoints];
   
   // Always use the same endpoint calculation that's used for node movement
-  // Exactly the same code as in updateRelationWaypoints function
-  
   // Update source docking point using the same method as in updateRelationWaypoints
-  const sourceSize = { width: 100, height: 50 };
+  const sourceSize = { width: sourceNode.width || 100, height: sourceNode.height || 50 };
   const secondPoint = updatedWaypoints[1];
   updatedWaypoints[0] = getDockingPoint(
     sourceNode, 
@@ -166,7 +164,7 @@ export function updateRelationWithFixedEndpoints(relation, waypoints, diagram) {
   );
   
   // Update target docking point using the same method as in updateRelationWaypoints
-  const targetSize = { width: 100, height: 50 };
+  const targetSize = { width: targetNode.width || 100, height: targetNode.height || 50 };
   const secondLastPoint = updatedWaypoints[updatedWaypoints.length - 2];
   updatedWaypoints[updatedWaypoints.length - 1] = getDockingPoint(
     targetNode,

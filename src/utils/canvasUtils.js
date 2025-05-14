@@ -108,7 +108,7 @@ export function getDirection(p1, p2) {
 
 /**
  * Get docking point on the boundary of a node
- * similar to bpmn-js approach, but now always on the ellipse boundary
+ * Now uses rectangle boundary intersection (not ellipse)
  * @param {Object} node Node with x, y coordinates
  * @param {Object} point External point to dock to
  * @param {Object} nodeSize Node size {width, height}
@@ -129,13 +129,17 @@ export function getDockingPoint(node, point, nodeSize = { width: 100, height: 50
     return { x: centerX + halfWidth, y: centerY };
   }
 
-  // Calculate intersection with ellipse boundary
-  // Parametric equation: (x/halfWidth)^2 + (y/halfHeight)^2 = 1
-  const angle = Math.atan2(dy, dx);
-  const x = centerX + halfWidth * Math.cos(angle);
-  const y = centerY + halfHeight * Math.sin(angle);
+  // Calculate intersection with rectangle boundary
+  // Parametric line: (x, y) = (centerX, centerY) + t * (dx, dy)
+  // Find t where the line hits the rectangle
+  const tx = dx !== 0 ? halfWidth / Math.abs(dx) : Infinity;
+  const ty = dy !== 0 ? halfHeight / Math.abs(dy) : Infinity;
+  const t = Math.min(tx, ty);
 
-  return { x, y };
+  return {
+    x: centerX + dx * t,
+    y: centerY + dy * t
+  };
 }
 
 /**
