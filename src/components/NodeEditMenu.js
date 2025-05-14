@@ -1,14 +1,30 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { CONSTRAINTS } from './ConDecNode';
 import { validateNodeConstraint } from '../utils/nodeConstraintUtils'; // <-- Add this import
+import { countIncomingRelationsDeclare } from '../utils/incomingRelationUtils';
 
 // Configuration for constraint types with their descriptions
 const CONSTRAINT_CONFIG = {
-  absence: { name: "Absence (0)", description: "Activity must not occur" },
-  absence_n: { name: "Absence (0..n)", description: "Activity can occur at most n times" },
-  existence_n: { name: "Existence (n..∗)", description: "Activity must occur at least n times" },
-  exactly_n: { name: "Exactly (n)", description: "Activity must occur exactly n times" },
-  init: { name: "Init", description: "Activity must be the first to occur" }
+  [CONSTRAINTS.ABSENCE]: {
+    name: "Absence (0)",
+    description: a => `Activity ${a} cannot be executed.`
+  },
+  [CONSTRAINTS.ABSENCE_N]: {
+    name: "Absence (0..n)",
+    description: (a, n) => `Activity ${a} can be executed at most ${n} times, i.e., the execution trace cannot contain ${n + 1} occurrences of ${a}.`
+  },
+  [CONSTRAINTS.EXISTENCE_N]: {
+    name: "Existence (n..∗)",
+    description: (a, n) => `Activity ${a} must be executed at least ${n} times.`
+  },
+  [CONSTRAINTS.EXACTLY_N]: {
+    name: "Exactly (n)",
+    description: (a, n) => `Activity ${a} must be executed exactly ${n} times.`
+  },
+  [CONSTRAINTS.INIT]: {
+    name: "Init",
+    description: a => `Activity ${a} must be the first executed activity.`
+  }
 };
 
 export function NodeEditMenu({
@@ -178,7 +194,6 @@ export function NodeEditMenu({
           setDraggingEditPopup(true);
         }}
       >
-        <span role="img" aria-label="wrench" style={{marginRight:8}}>🔧</span>
         Edit Activity Node
         {constraintStatus && !constraintStatus.valid && (
           <span title="Constraint violated" style={{ color: '#d32f2f', fontSize: 20, marginLeft: 8 }}>❗</span>
@@ -258,8 +273,19 @@ export function NodeEditMenu({
           fontSize: 13
         }}>
           <p style={{ margin: '0 0 6px 0', fontWeight: 500 }}>Constraint Details:</p>
-          <p style={{ margin: 0, color: '#555' }}>{CONSTRAINT_CONFIG[formValues.constraint]?.description}</p>
-          
+          <p style={{ margin: 0, color: '#555' }}>
+            {(() => {
+              const config = CONSTRAINT_CONFIG[formValues.constraint];
+              if (!config) return null;
+              if (typeof config.description === 'function') {
+                if (formValues.constraint === CONSTRAINTS.ABSENCE_N || formValues.constraint === CONSTRAINTS.EXISTENCE_N || formValues.constraint === CONSTRAINTS.EXACTLY_N) {
+                  return config.description(formValues.name || 'a', formValues.constraintValue || 1);
+                }
+                return config.description(formValues.name || 'a');
+              }
+              return config.description;
+            })()}
+          </p>
           {/* Current status display */}
           <div style={{ 
             marginTop: 8,
@@ -272,17 +298,12 @@ export function NodeEditMenu({
             color: constraintStatus?.valid ? '#2e7d32' : '#c62828'
           }}>
             <span style={{ marginRight: 6 }}>
-              {constraintStatus?.valid ? 
-                '✓ Valid' : 
+              {constraintStatus?.valid ?
+                `✓ Valid (${countIncomingRelationsDeclare(node, window?.condecDiagramForValidation?.relations || [])} incoming)` :
                 <span style={{ fontWeight: 'bold' }}>⚠️ Invalid</span>}
             </span>
             {!constraintStatus?.valid && (
               <span>{constraintStatus.message}</span>
-            )}
-            {constraintStatus?.valid && formValues.constraint && (
-              <span>
-                {node.incomingRelationsCount || 0} incoming relation(s)
-              </span>
             )}
           </div>
         </div>

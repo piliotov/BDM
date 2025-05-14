@@ -20,18 +20,19 @@ export function appendActivityAndConnect(node, diagram, saveToUndoStack) {
   saveToUndoStack && saveToUndoStack();
 
   const nodeWidth = 100;
-  const gap = 60;
+  const gap = 100;
   const newX = node.x + nodeWidth + gap;
   const newY = node.y;
 
   const newNode = {
     id: `activity_${Date.now()}`,
     type: NODE_TYPES.ACTIVITY,
-    name: `Activity ${diagram.nodes.length + 1}`,
+    name: '', // Start with empty name
     x: newX,
     y: newY,
     constraint: null,
-    constraintValue: null
+    constraintValue: null,
+    editing: true // Prompt rename on creation
   };
 
   const newRelation = {

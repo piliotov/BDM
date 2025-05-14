@@ -1,98 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { RELATION_TYPES } from '../utils/relationUtils';
-
-// Detailed descriptions and visual representations for relation types
-const RELATION_DESCRIPTIONS = {
-  [RELATION_TYPES.RESP_EXISTENCE]: {
-    label: 'Response Existence',
-    description: 'If a is executed, then b must be executed before or after a'
-  },
-  [RELATION_TYPES.COEXISTENCE]: {
-    label: 'Co-Existence',
-    description: 'Neither a nor b is executed, or they are both executed'
-  },
-  [RELATION_TYPES.RESPONSE]: {
-    label: 'Response',
-    description: 'If a is executed, then b must be executed thereafter'
-  },
-  [RELATION_TYPES.PRECEDENCE]: {
-    label: 'Precedence',
-    description: 'b can be executed only if a has been previously executed'
-  },
-  [RELATION_TYPES.SUCCESSION]: {
-    label: 'Succession',
-    description: 'a and b must be executed in succession, i.e. b must follow a and a must precede b'
-  },
-  [RELATION_TYPES.ALT_RESPONSE]: {
-    label: 'Alternate Response',
-    description: 'b is response of a and between every two executions of a, b must be executed at least once'
-  },
-  [RELATION_TYPES.ALT_PRECEDENCE]: {
-    label: 'Alternate Precedence',
-    description: 'a is precedence of b and between every two executions of b, a must be executed at least once'
-  },
-  [RELATION_TYPES.ALT_SUCCESSION]: {
-    label: 'Alternate Succession',
-    description: 'b is alternate response of a, and a is alternate precedence of b'
-  },
-  [RELATION_TYPES.CHAIN_RESPONSE]: {
-    label: 'Chain Response',
-    description: 'If a is executed, then b must be executed next (immediately after a)'
-  },
-  [RELATION_TYPES.CHAIN_PRECEDENCE]: {
-    label: 'Chain Precedence',
-    description: 'If b is executed, then a must have been executed immediately before b'
-  },
-  [RELATION_TYPES.CHAIN_SUCCESSION]: {
-    label: 'Chain Succession',
-    description: 'a and b must be executed in sequence (next to each other)'
-  },
-  // Negative relations
-  [RELATION_TYPES.RESP_ABSENCE]: {
-    label: 'Response Absence',
-    description: 'If a is executed, then b can never be executed'
-  },
-  [RELATION_TYPES.NOT_COEXISTENCE]: {
-    label: 'Not Co-Existence',
-    description: 'a and b exclude each other'
-  },
-  [RELATION_TYPES.NEG_RESPONSE]: {
-    label: 'Neg. Response',
-    description: 'b cannot be executed after a'
-  },
-  [RELATION_TYPES.NEG_PRECEDENCE]: {
-    label: 'Neg. Precedence',
-    description: 'a cannot be executed before b'
-  },
-  [RELATION_TYPES.NEG_SUCCESSION]: {
-    label: 'Neg. Succession',
-    description: 'a and b cannot be executed in succession'
-  },
-  [RELATION_TYPES.NEG_ALT_RESPONSE]: {
-    label: 'Neg. Alt. Response',
-    description: 'b cannot be executed between any two occurrences of a'
-  },
-  [RELATION_TYPES.NEG_ALT_PRECEDENCE]: {
-    label: 'Neg. Alt. Precedence',
-    description: 'a cannot be executed between any two bs'
-  },
-  [RELATION_TYPES.NEG_ALT_SUCCESSION]: {
-    label: 'Neg. Alt. Succession',
-    description: 'b cannot be executed between any two as and viceversa'
-  },
-  [RELATION_TYPES.NEG_CHAIN_RESPONSE]: {
-    label: 'Neg. Chain Response',
-    description: 'b cannot be executed next to a'
-  },
-  [RELATION_TYPES.NEG_CHAIN_PRECEDENCE]: {
-    label: 'Neg. Chain Precedence',
-    description: 'a cannot be executed immediately before b'
-  },
-  [RELATION_TYPES.NEG_CHAIN_SUCCESSION]: {
-    label: 'Neg. Chain Succession',
-    description: 'a and b cannot be executed in succession'
-  },
-};
+import relationDescriptions from '../utils/relationDescriptions';
 
 // Group relation types for easier selection
 const RELATION_GROUPS = {
@@ -161,10 +69,9 @@ export function RelationEditMenu({
   const targetNode = nodes?.find(node => node.id === targetNodeId);
 
   // Get current relation description
-  const relationInfo = RELATION_DESCRIPTIONS[relationType] || {
-    label: 'Unknown',
-    symbol: '•',
-    description: 'No description available'
+  const relationInfo = {
+    label: relationType,
+    description: relationDescriptions[relationType] || 'No description available'
   };
 
   // For handling changes
@@ -264,8 +171,12 @@ export function RelationEditMenu({
     return Object.entries(RELATION_GROUPS).map(([groupKey, relationTypes]) => (
       <optgroup key={groupKey} label={groupKey.replace(/_/g, ' ')}>
         {relationTypes.map(type => (
-          <option key={type} value={type}>
-            {RELATION_DESCRIPTIONS[type]?.label || type}
+          <option
+            key={type}
+            value={type}
+            title={relationDescriptions[type] || type}
+          >
+            {type}
           </option>
         ))}
       </optgroup>
@@ -283,7 +194,7 @@ export function RelationEditMenu({
         bottom: 0,
         width: '300px',
         background: '#fff',
-        borderLeft: '1.5px solid #1976d2',
+        borderLeft: '1px solid #1976d2',
         boxShadow: '-2px 0 12px rgba(0,0,0,0.1)',
         zIndex: 1000,
         padding: '20px',
@@ -307,7 +218,6 @@ export function RelationEditMenu({
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center' }}>
-          <span role="img" aria-label="link" style={{marginRight: 8}}>🔗</span>
           Edit Relation
         </div>
         <button
@@ -360,14 +270,14 @@ export function RelationEditMenu({
             }}
             title="Reverse relation direction"
           >
-            {/* Single arrow icon, always points right */}
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1976d2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            {/* Single arrow icon*/}
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#000000" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="5" y1="12" x2="19" y2="12"/>
               <polyline points="12 5 19 12 12 19"/>
             </svg>
           </button>
           <div style={{ flex: 1, fontWeight: 'bold', fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {targetNode?.name || 'Target'}
+            {targetNode?.name || 'No name for the target node'}
           </div>
         </div>
         
@@ -429,20 +339,7 @@ export function RelationEditMenu({
           {renderRelationOptions()}
         </select>
       </div>
-      
-      {/* Relation description */}
-      <div style={{ 
-        marginBottom: 16,
-        padding: '10px',
-        background: '#f8f9fa',
-        borderRadius: 4,
-        fontSize: 13,
-        color: '#444'
-      }}>
-        <p style={{ margin: '0', lineHeight: '1.4' }}>
-          {relationInfo.description}
-        </p>
-      </div>
+    
 
       <div style={{ marginTop: 'auto', paddingTop: '16px' }}>
         <button

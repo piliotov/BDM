@@ -1,9 +1,13 @@
-// Utility to validate node constraints against the diagram
+
+
+// Use the new Declare/ConDec incoming relation counting logic
+import { countIncomingRelationsDeclare } from './incomingRelationUtils';
 
 export function validateNodeConstraint(node, diagram) {
   if (!node || !diagram) return { valid: true };
 
-  const incomingCount = diagram.relations.filter(r => r.targetId === node.id).length;
+  // Use Declare/ConDec semantics for incoming relation count
+  const incomingCount = countIncomingRelationsDeclare(node, diagram.relations);
 
   switch (node.constraint) {
     case 'absence':

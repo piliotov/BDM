@@ -48,6 +48,27 @@ const BpmnModeler = () => {
     return () => modeler.destroy();
   }, [containerReady]);
 
+  // --- Keyboard Shortcuts for Undo/Delete ---
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Undo: Ctrl+Z or Cmd+Z
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+        modelerRef.current?.get('commandStack').undo();
+        e.preventDefault();
+      }
+      // Delete: Delete or Backspace
+      if ((e.key === 'Delete' || e.key === 'Backspace')) {
+        const selection = modelerRef.current?.get('selection').get();
+        if (selection && selection.length > 0) {
+          modelerRef.current.get('modeling').removeElements(selection);
+          e.preventDefault();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [containerReady]);
+
   // --- Handlers ---
   const handleSave = () => modelerRef.current?.saveXML({ format: true }).then(({ xml }) => {
     const link = document.createElement('a');

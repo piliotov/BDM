@@ -72,6 +72,19 @@ export function ConDecNode({
     if (node.editing) setEditing(true);
   }, [node.name, node.editing]);
 
+  // --- Prevent node deletion with Backspace when editing name (macOS fix) ---
+  useEffect(() => {
+    if (!editing) return;
+    const handleKeyDown = (e) => {
+      // Only block Backspace/Delete if editing
+      if ((e.key === 'Backspace' || e.key === 'Delete') && document.activeElement === inputRef.current) {
+        e.stopPropagation();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [editing]);
+
   // Helper to finish editing and update name
   const finishEditing = () => {
     setEditing(false);
