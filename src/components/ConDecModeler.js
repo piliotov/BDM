@@ -769,6 +769,7 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
           onNodeDragStart={handleNodeDragStart}
           onNodeDrag={handleNodeDrag}
           onAppend={handleAppendActivity}
+          setMode={setMode} // <-- Add this line
         />
 {/* --- Render floating node menu for selected node --- */}
         {/* --- Render node edit popup if editing a node --- */}

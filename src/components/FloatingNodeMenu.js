@@ -1,7 +1,7 @@
 import React from 'react';
 
 
-// Define icons for edit, delete, and append actions
+// Define icons for edit, delete, append, and connect actions
 const EditIcon = (
 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 2000 2000"><path fill="currentColor" d="M1511.45 292.911a415.8 415.8 0 0 0-415.8 415.8a415.8 415.8 0 0 0 415.8 415.8a415.8 415.8 0 0 0 397.194-292.826l-298.378 79.95l-232.313-152.986l124.695-248.645l313.27-83.94A415.8 415.8 0 0 0 1511.45 292.91zm-492.602 555.194L96.6 1480.02c-28.476 84.174 63.924 222.774 158.995 227.068l902.881-618.354a415.8 415.8 0 0 1-139.626-240.63z"/></svg>
 );
@@ -14,15 +14,17 @@ const AppendIcon = (
 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 2048 2048"><rect width="17.563" height="14.478" x="1.23" y="1035.052" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.034" rx="2.759" transform="translate(55.328 -99820.702) scale(96.7529)"/></svg>
 );
 
+const ConnectIcon = (
+  <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 2048 2048"><path fill="currentColor" d="M1866.407 206.692s-585.454 298.724-882.844 438.406c63.707 58.178 122.963 120.927 184.437 181.407c-302.353 306.387-604.71 612.769-907.062 919.156c22.172 21.16 44.327 42.309 66.5 63.469c302.352-306.388 604.71-612.738 907.062-919.125c61.588 61.37 122.828 123.086 184.438 184.437c158.845-312.83 447.469-867.75 447.469-867.75z"/></svg>
+
+);
+
 // Map action keys to icons and colors
 const ACTION_ICONS = {
   edit: { icon: EditIcon, color: '#1976d2', title: 'Edit' },
   append: { icon: AppendIcon, color: '#43a047', title: 'Append Activity' },
   delete: { icon: DeleteIcon, color: '#d32f2f', title: 'Delete' },
-
 };
-
-
 
 // --- Main Node Menu ---
 export function ConDecNodeMenu({
@@ -31,6 +33,7 @@ export function ConDecNodeMenu({
   onEdit,
   onDelete,
   onAppend,
+  onConnect,
   zoom = 1
 }) {
   if (!node) return null;
@@ -74,24 +77,41 @@ export function ConDecNodeMenu({
         style={{ pointerEvents: 'all' }}
         transform={`translate(${baseX},${baseY}) scale(${1/zoom})`}
       >
-        <foreignObject x={0} y={0} width={ICON_SIZE * 4 + 32} height={ICON_SIZE + 4}>
-          <div style={{ display: 'flex', gap: 4, background: 'none', pointerEvents: 'all', alignItems: 'center' }}>
-            {actions.map(([key, action]) => (
+        <foreignObject x={0} y={0} width={ICON_SIZE * 4} height={ICON_SIZE * 2 + 12}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, background: 'none', pointerEvents: 'all', alignItems: 'left' }}>
+            {/* First row: edit, append, delete */}
+            <div style={{ display: 'flex', gap: 4 }}>
+              {actions.map(([key, action]) => (
+                <button
+                  key={key}
+                  className={btnClass}
+                  style={btnStyle}
+                  title={action.title}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (key === 'edit' && onEdit) onEdit(node, e);
+                    if (key === 'delete' && onDelete) onDelete(node);
+                    if (key === 'append' && onAppend) onAppend(node);
+                  }}
+                >
+                  {action.icon}
+                </button>
+              ))}
+            </div>
+            {/* Second row: connect (arrow) */}
+            <div style={{ display: 'flex', gap: 4, marginTop: 2 }}>
               <button
-                key={key}
                 className={btnClass}
-                style={btnStyle}
-                title={action.title}
-                onClick={(e) => {
+                style={btnStyle }
+                title="Create Relation"
+                onClick={e => {
                   e.stopPropagation();
-                  if (key === 'edit' && onEdit) onEdit(node, e);
-                  if (key === 'delete' && onDelete) onDelete(node);
-                  if (key === 'append' && onAppend) onAppend(node);
+                  if (onConnect) onConnect(node);
                 }}
               >
-                {action.icon}
+                {ConnectIcon}
               </button>
-            ))}
+            </div>
           </div>
         </foreignObject>
       </g>

@@ -6,6 +6,12 @@ import { calculateIntersectionPoint } from '../utils/geometryUtils';
 import { useCanvasPanning } from '../utils/canvasUtils';
 import { updateRelationsForNode } from '../utils/relationUtils';
 import { RelationMarkers } from '../utils/relationIconUtils';
+import {
+  startConnectMode,
+  endConnectMode,
+  getConnectModeState,
+  shouldHandleNodeClick
+} from '../utils/connectModeUtils';
 
 export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
   const {
@@ -50,6 +56,9 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
   useImperativeHandle(ref, () => svgRef.current, []);
 
   const [alignmentGuides, setAlignmentGuides] = useState({ x: null, y: null });
+
+  // Add state for connect-from-node-menu mode
+  const [connectFromNodeMenu, setConnectFromNodeMenu] = useState(null);
 
   // Set up canvas panning functionality
   const { handlePanStart, handlePanMove, handlePanEnd } = useCanvasPanning({
@@ -136,6 +145,36 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
       );
     });
     
+    const handleNodeClick = (nodeId, e) => {
+      e.stopPropagation();
+      // --- Handle connect-from-node-menu mode ---
+      if (connectFromNodeMenu && connectFromNodeMenu.sourceId && nodeId !== connectFromNodeMenu.sourceId) {
+        // Create relation from sourceId to nodeId
+        if (props.onRelationCreate) {
+          props.onRelationCreate(connectFromNodeMenu.sourceId, nodeId);
+        }
+        setConnectFromNodeMenu(null);
+        if (props.setMode) props.setMode('hand');
+        return;
+      }
+      // --- Handle palette addRelation mode (drag) ---
+      if (props.mode === 'addRelation' && props.setNewRelation) {
+        // Start drag mode as before
+        const sourceNode = diagram.nodes.find(n => n.id === nodeId);
+        props.setNewRelation({
+          sourceId: nodeId,
+          sourceNode,
+          targetId: null,
+          targetNode: null,
+          currentX: sourceNode.x,
+          currentY: sourceNode.y
+        });
+        return;
+      }
+      // Otherwise, normal selection
+      props.onSelectElement('node', nodeId);
+    };
+
     const nodeElements = nodes.map(node => {
       const isSelected = !multiSelectedNodes.length && selectedElement &&
         selectedElement.type === 'node' &&
@@ -146,11 +185,8 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
           <ConDecNode
             node={node}
             isSelected={isSelected}
-            mode={mode}
-            onSelect={(e) => {
-              e.stopPropagation();
-              onSelectElement('node', node.id);
-            }}
+            mode={props.mode}
+            onSelect={(e) => handleNodeClick(node.id, e)}
             onDoubleClick={() => {}}
             onDragStart={e => handleNodeInteractionStart(node.id, e)}
             onMenu={null}
@@ -200,13 +236,46 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
             onAppend={props.onAppend}
             onClose={props.onNodeMenuClose}
             zoom={zoom}
+            onConnect={(node) => {
+              // Enable connect-from-node-menu mode
+              setConnectFromNodeMenu({ sourceId: node.id });
+              if (props.setMode) props.setMode('connectFromNodeMenu');
+            }}
           />
         );
       }
     }
 
-    const temporaryRelation = newRelation && renderTemporaryRelation();
-    
+    // --- Show temporary line for connect-from-node-menu mode ---
+    let temporaryRelation = null;
+    if (connectFromNodeMenu && connectFromNodeMenu.sourceId) {
+      const sourceNode = nodes.find(n => n.id === connectFromNodeMenu.sourceId);
+      if (sourceNode && props.mousePosition) {
+        const sourcePoint = { x: sourceNode.x, y: sourceNode.y };
+        const targetPoint = {
+          x: (props.mousePosition.x - (props.canvasOffset?.x || 0)) / (props.zoom || 1),
+          y: (props.mousePosition.y - (props.canvasOffset?.y || 0)) / (props.zoom || 1)
+        };
+        const sourceEdgePoint = calculateIntersectionPoint(targetPoint, sourcePoint);
+        temporaryRelation = (
+          <line
+            x1={sourceEdgePoint.x}
+            y1={sourceEdgePoint.y}
+            x2={targetPoint.x}
+            y2={targetPoint.y}
+            stroke="#1a73e8"
+            strokeWidth="1.5"
+            strokeDasharray="5,5"
+            markerEnd="url(#arrow)"
+            style={{ pointerEvents: 'none' }}
+          />
+        );
+      }
+    } else if (props.newRelation && props.newRelation.sourceNode) {
+      // ...existing code for palette drag mode...
+      temporaryRelation = renderTemporaryRelation();
+    }
+
     return (
       <>
         {relationElements}
@@ -331,6 +400,20 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
     }
   };
 
+  const handleCanvasClick = (e) => {
+    if (connectFromNodeMenu) {
+      setConnectFromNodeMenu(null);
+      if (props.setMode) props.setMode('hand');
+      return;
+    }
+    if (getConnectModeState().isActive) {
+      endConnectMode();
+      // Optionally, reset mode or UI
+      return;
+    }
+    if (onCanvasClick) onCanvasClick(e);
+  };
+
   // --- Relation waypoint handlers ---
   const handleWaypointDrag = (relationId, waypoints, updatedRelations) => {
     if (!relationId) return;
@@ -416,7 +499,7 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
         className="condec-canvas"
         width="100%"
         height="100%"
-        onClick={onCanvasClick}
+        onClick={handleCanvasClick}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseDown={handleCanvasMouseDown}
