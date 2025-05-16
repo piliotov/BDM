@@ -497,12 +497,30 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
   };
 
   // --- Zoom Handler ---
+  // Improved zoom: zooms to mouse position, smooths scale, disables zoom out too far
   const handleCanvasWheel = (e) => {
-    // Zoom only if ctrlKey (or metaKey for Mac) or pinch gesture (deltaY !== 0 && ctrlKey)
+    // Only zoom if ctrlKey or metaKey (pinch/zoom gesture)
     if (e.ctrlKey || e.metaKey) {
       e.preventDefault();
-      let newZoom = zoom * (e.deltaY > 0 ? 0.9 : 1.1);
+
+      // Get mouse position relative to canvas center (SVG)
+      const svg = document.querySelector('.condec-canvas');
+      if (!svg) return;
+      const rect = svg.getBoundingClientRect();
+      const mouseX = (e.clientX - rect.left - canvasOffset.x) / zoom;
+      const mouseY = (e.clientY - rect.top - canvasOffset.y) / zoom;
+
+      // Use a smaller zoom step for smoother feel
+      const zoomFactor = e.deltaY > 0 ? 0.95 : 1.05;
+      let newZoom = zoom * zoomFactor;
       newZoom = Math.max(0.2, Math.min(3, newZoom));
+
+      // Adjust canvasOffset so zoom centers on mouse
+      setCanvasOffset(prev => ({
+        x: prev.x - (mouseX * (newZoom - zoom)),
+        y: prev.y - (mouseY * (newZoom - zoom))
+      }));
+
       setZoom(newZoom);
     }
   };
@@ -636,12 +654,6 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
     setSelectionBox(null);
   };
 
-  // --- Unified Edit Popup for Node and Relation ---
-  // Remove old renderEditPopup and outside click for node edit popup
-
-  // --- Render floating node menu and node edit popup ---
-  // Always render FloatingNodeMenu for selected node (unless multi-select or relation selected)
-  // Render NodeEditMenu only if editNodePopup is set
 
   return (
     <div className="condec-modeler-wrapper" style={wrapperStyle}>

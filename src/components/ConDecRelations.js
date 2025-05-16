@@ -583,6 +583,29 @@ export function ConDecRelation({
           </g>
         );
       })()}
+            {/* Draggable Label */}
+      <g 
+        className="condec-relation-label" 
+        cursor={isSelected ? "move" : "pointer"}
+        onMouseDown={isSelected ? handleLabelMouseDown : handleRelationClick}
+        pointerEvents="all"
+      >
+        {/* Background rect for easier selection - fixed size, not scaled by zoom */}
+        <rect
+          x={labelX - 40}
+          y={labelY - 18}
+          width={80} 
+          height={15}
+          fill={isSelected ? "rgba(255,255,255,0.7)" : "transparent"}
+          stroke={isSelected ? "#1a73e8" : "transparent"}
+          strokeWidth={isSelected ? 1 : 0}
+          strokeDasharray={isSelected ? "2,1" : "0"}
+          rx={4}
+          ry={4}
+          pointerEvents="all"
+        />
+        {renderRelationLabel(relation, midPoint, zoom)}
+      </g>
 
       {/* Control points - only visible when selected */}
       {isSelected && currentWaypoints.map((point, index) => (
@@ -622,31 +645,6 @@ export function ConDecRelation({
           />
         );
       })}
-
-      {/* --- MOVE LABEL GROUP TO THE END SO IT IS ON TOP --- */}
-      {/* Draggable Label */}
-      <g 
-        className="condec-relation-label" 
-        cursor={isSelected ? "move" : "pointer"}
-        onMouseDown={isSelected ? handleLabelMouseDown : handleRelationClick}
-        pointerEvents="all"
-      >
-        {/* Background rect for easier selection - fixed size, not scaled by zoom */}
-        <rect
-          x={labelX - 40}
-          y={labelY - 14}
-          width={80} 
-          height={28}
-          fill={isSelected ? "rgba(255,255,255,0.7)" : "transparent"}
-          stroke={isSelected ? "#1a73e8" : "transparent"}
-          strokeWidth={isSelected ? 1 : 0}
-          strokeDasharray={isSelected ? "2,1" : "0"}
-          rx={4}
-          ry={4}
-          pointerEvents="all"
-        />
-        {renderRelationLabel(relation, midPoint, zoom)}
-      </g>
     </g>
   );
 }

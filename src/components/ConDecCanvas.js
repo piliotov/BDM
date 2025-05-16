@@ -159,10 +159,9 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
         return;
       }
       
-      // --- Palette relation tool: click source, then click target ---
+      // --- Palette relation tool ---
       if (props.mode === 'addRelation') {
         if (!relationCreationState.active) {
-          // First click: set source node
           const sourceNode = diagram.nodes.find(n => n.id === nodeId);
           setRelationCreationState({
             active: true,
@@ -175,7 +174,6 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
           relationCreationState.active &&
           nodeId !== relationCreationState.sourceId
         ) {
-          // Only allow target selection if source is already set and target is different
           if (props.onRelationCreate) {
             props.onRelationCreate(relationCreationState.sourceId, nodeId);
           }
@@ -187,11 +185,8 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
           setRelationMouse(null);
           return;
         }
-        // If already active and clicking the source again, ignore (do not reset source)
         return;
       }
-      
-      // Otherwise, normal selection
       props.onSelectElement('node', nodeId);
     };
 
@@ -580,7 +575,7 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
             top: '10px',
             left: '50%',
             transform: 'translateX(-50%)',
-            backgroundColor: 'rgba(25, 118, 210, 0.8)',
+            backgroundColor: 'rgba(28, 139, 14, 0.8)',
             color: 'white',
             padding: '8px 12px',
             borderRadius: '4px',
