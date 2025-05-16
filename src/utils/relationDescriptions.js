@@ -1,11 +1,28 @@
 // src/utils/relationDescriptions.js
 const relationDescriptions = {
-  response: "A response relation means that whenever the source occurs, the target must eventually follow.",
-  precedence: "A precedence relation means the target can only occur if the source has occurred before.",
-  succession: "A succession relation means the source must be followed by the target, and the target can only occur if the source has occurred before.",
-  coexistence: "A coexistence relation means that if one of the nodes occurs, the other must also occur at some point.",
-  exclusion: "An exclusion relation means that the two nodes cannot both occur in the same trace.",
-  // Add more relation types and their descriptions as needed
+  response: "If a is executed, then b must be executed thereafter",
+  precedence: "b can be executed only if a has been",
+  succession: "a and b must be executed in succession, i.e. b must follow a and a must precede b",
+  coexistence: "Neither a nor b is executed, or they are both executed",
+  exclusion: "An exclusion relation means that the two nodes cannot both occur in the same trace",
+  resp_existence: "If a is executed, then b must be executed before a",
+  alt_response: "b is response of a and between every two executions of a, b must be executed at least once",
+  alt_precedence: "a is precedence of b and between every two executions of b, a must be executed at least once",
+  alt_succession: "b is alternate response of a, and a is alternate precedence of b",
+  chain_response: "If a is executed, then b must be executed next (immediately after a)",
+  chain_precedence: "If b is executed, then a must have been executed immediately before b",
+  chain_succession: "a and b must be executed in sequence (next to each other)",
+  resp_absence: "If a is executed, then b can never be executed",
+  not_coexistence: "a and b exclude each other",
+  neg_response: "b cannot be executed after a",
+  neg_precedence: "a cannot be executed before b",
+  neg_succession: "a and b cannot be executed in succession",
+  neg_alt_response: "b cannot be executed between any two executions of a",
+  neg_alt_precedence: "a cannot be executed between any two bs",
+  neg_alt_succession: "b cannot be executed between any two as and viceversa",
+  neg_chain_response: "b cannot be executed next to a",
+  neg_chain_precedence: "a cannot be executed immediately before b",
+  neg_chain_succession: "a and b cannot be executed in sequence",
 };
 
 export default relationDescriptions;

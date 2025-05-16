@@ -68,12 +68,6 @@ export function RelationEditMenu({
   const sourceNode = nodes?.find(node => node.id === sourceNodeId);
   const targetNode = nodes?.find(node => node.id === targetNodeId);
 
-  // Get current relation description
-  const relationInfo = {
-    label: relationType,
-    description: relationDescriptions[relationType] || 'No description available'
-  };
-
   // For handling changes
   const handleChangeType = (e) => {
     const newType = e.target.value;

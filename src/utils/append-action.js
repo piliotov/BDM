@@ -12,20 +12,23 @@ import { isRelationAllowed } from './nodeUtils';
 export function appendActivityAndConnect(node, diagram, saveToUndoStack) {
   if (!diagram || !node) return null;
 
-  // Check if relation is allowed (simulate as if new node is target)
-  // Always allow for new node (no constraints yet)
-  // But if you want to prevent appending from nodes with constraints, check here:
-  // if (!isRelationAllowed(diagram, node.id, 'newNodeId')) return null;
-
-  saveToUndoStack && saveToUndoStack();
-
   const nodeWidth = 100;
   const gap = 100;
   const newX = node.x + nodeWidth + gap;
   const newY = node.y;
 
+  // Generate the new node id in advance for constraint checking
+  const newNodeId = `activity_${Date.now()}`;
+
+  // Check if relation is allowed (simulate as if new node is target)
+  if (!isRelationAllowed(diagram, node.id, newNodeId)) {
+    return null;
+  }
+
+  saveToUndoStack && saveToUndoStack();
+
   const newNode = {
-    id: `activity_${Date.now()}`,
+    id: newNodeId,
     type: NODE_TYPES.ACTIVITY,
     name: '', // Start with empty name
     x: newX,
