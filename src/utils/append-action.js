@@ -1,6 +1,5 @@
 import { NODE_TYPES } from './diagramUtils';
-import { RELATION_TYPES } from './relationUtils';
-import { isRelationAllowed } from './nodeUtils';
+import { layoutConnection } from './canvasUtils';
 
 /**
  * Append a new activity to the right of the given node and connect them.
@@ -12,7 +11,9 @@ import { isRelationAllowed } from './nodeUtils';
 export function appendActivityAndConnect(node, diagram, saveToUndoStack) {
   if (!diagram || !node) return null;
 
-  const nodeWidth = 100;
+  // Use actual node width/height if present, else default
+  const nodeWidth = node.width || node.size?.width || 100;
+  const nodeHeight = node.height || node.size?.height || 50;
   const gap = 100;
   const newX = node.x + nodeWidth + gap;
   const newY = node.y;
@@ -20,33 +21,33 @@ export function appendActivityAndConnect(node, diagram, saveToUndoStack) {
   // Generate the new node id in advance for constraint checking
   const newNodeId = `activity_${Date.now()}`;
 
-  // Check if relation is allowed (simulate as if new node is target)
-  if (!isRelationAllowed(diagram, node.id, newNodeId)) {
-    return null;
-  }
-
   saveToUndoStack && saveToUndoStack();
 
   const newNode = {
     id: newNodeId,
-    type: NODE_TYPES.ACTIVITY,
+    type: NODE_TYPES.ACTIVITY, // Set type to resp_existence
     name: '', // Start with empty name
     x: newX,
     y: newY,
+    width: nodeWidth, // Set width for downstream menu placement
+    height: nodeHeight,
     constraint: null,
     constraintValue: null,
     editing: true // Prompt rename on creation
   };
 
+  // Use layoutConnection to get proper waypoints with actual node sizes
+  const waypoints = layoutConnection(
+    { ...node, width: nodeWidth, height: nodeHeight },
+    { ...newNode, width: nodeWidth, height: nodeHeight }
+  );
+
   const newRelation = {
     id: `relation_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
-    type: RELATION_TYPES.RESPONSE,
+    type: 'resp_existence', // Use resp_existence for the relation
     sourceId: node.id,
     targetId: newNode.id,
-    waypoints: [
-      { x: node.x + nodeWidth / 2, y: node.y },
-      { x: newX - nodeWidth / 2, y: newY }
-    ]
+    waypoints
   };
 
   const updatedDiagram = {

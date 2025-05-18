@@ -3,12 +3,13 @@ import '../styles/ConDecModeler.css';
 import '../styles/ModelerButtons.css';
 import { ConDecCanvas } from './ConDecCanvas';
 import { snapNodeDuringDrag } from '../utils/gridUtil';
-import { initialDiagram, diagramToXML, xmlToDiagram } from '../utils/diagramUtils';
+import { initialDiagram } from '../utils/diagramUtils';
 import { isRelationAllowed, RELATION_TYPES } from '../utils/relationUtils';
 import { addNode, handleNodeRename as utilHandleNodeRename } from '../utils/nodeUtils';
 import { appendActivityAndConnect } from '../utils/append-action';
 import RelationEditMenu from './RelationEditMenu';
 import { NodeEditMenu } from './NodeEditMenu';
+import { importDeclareTxtWithLayout, importDeclareXmlWithLayout, importDeclareJsonWithLayout } from '../utils/declareImportUtils';
 
 // Constants for local storage
 const LOCAL_STORAGE_KEY = 'condec-diagram';
@@ -33,12 +34,14 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [panOrigin, setPanOrigin] = useState({ x: 0, y: 0 });
+  const [showImportDropdown, setShowImportDropdown] = useState(false);
   
   // Calculate the center offset based on window size
   const [canvasOffset, setCanvasOffset] = useState({ x: 0, y: 0 });
 
   // Ref for canvas SVG to compute node screen position
   const canvasRef = useRef(null);
+  const importBtnRef = useRef(null);
 
   // Ensure the modeler always fills its parent or viewport if used standalone
   const wrapperStyle = {
@@ -543,14 +546,24 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
     };
   }, [draggingEditPopup, dragOffset]);
 
+  // Export JSON handler
+  const handleExportJSON = () => {
+    if (!diagram) return;
+    const jsonString = JSON.stringify(diagram, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'condec-diagram.json';
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   // Export SVG handler
   const handleExportSVG = () => {
     const svg = document.querySelector('.condec-canvas');
     if (!svg) return;
-    // Clone and clean up SVG for export
     const clone = svg.cloneNode(true);
-    // Remove any interactive overlays or invisible lines if needed
-    // Optionally set width/height attributes for better compatibility
     clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
     clone.setAttribute('width', svg.clientWidth || 800);
     clone.setAttribute('height', svg.clientHeight || 600);
@@ -667,20 +680,10 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
         </button>
         <button 
           className="modeler-btn"
-          onClick={() => {
-            // Export as XML
-            const xmlString = diagramToXML(diagram);
-            const blob = new Blob([xmlString], { type: 'application/xml' });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = 'condec-diagram.xml';
-            link.click();
-            URL.revokeObjectURL(url);
-          }} 
-          title="Export Diagram (XML)"
+          onClick={handleExportJSON}
+          title="Export Diagram (JSON)"
         >
-          Export
+          Export JSON
         </button>
         <button 
           className="modeler-btn"
@@ -689,46 +692,101 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
         >
           Export SVG
         </button>
-        <label 
+        <button
           className="modeler-btn import"
-          title="Import Diagram (XML)"
+          style={{ minWidth: 100 }}
+          onClick={() => setShowImportDropdown(v => !v)}
+          title="Import diagram"
+          type="button"
+          ref={importBtnRef}
         >
-          Import
-          <input type="file" accept=".xml" onChange={(event) => {
-            const file = event.target.files[0];
-            if (!file) return;
-
-            if (!window.confirm('Importing will overwrite your current model. Continue?')) {
-              event.target.value = null;
-              return;
-            }
-
-            const reader = new FileReader();
-            reader.onload = (e) => {
-              try {
-                const xmlString = e.target.result;
-                const importedDiagram = xmlToDiagram(xmlString);
-                if (
-                  importedDiagram &&
-                  Array.isArray(importedDiagram.nodes) &&
-                  Array.isArray(importedDiagram.relations)
-                ) {
-                  saveToUndoStack();
-                  setDiagram(importedDiagram);
-                  setSelectedElement(null);
-                } else {
-                  alert('Invalid XML diagram format.');
+          Import ▼
+        </button>
+        {showImportDropdown && (
+          <div style={{
+            position: 'absolute',
+            top: 50,
+            left: 335,
+            background: '#388e3c',
+            border: '1px solid #2e7031',
+            borderRadius: 4,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+            zIndex: 1000,
+            minWidth: 180,
+            color: '#fff',
+            padding: 0
+          }}>
+            <label style={{ display: 'block', padding: '8px 16px', cursor: 'pointer', color: '#fff' }}>
+              Import XML
+              <input type="file" accept=".xml" style={{ display: 'none' }} onChange={async (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+                if (!window.confirm('Importing will overwrite your current model. Continue?')) {
+                  event.target.value = null;
+                  setShowImportDropdown(false);
+                  return;
                 }
-              } catch (error) {
-                alert('Error importing diagram from XML. Please check the file format.');
-                console.error('Import error:', error);
-              }
-            };
-
-            reader.readAsText(file);
-            event.target.value = null;
-          }} />
-        </label>
+                const text = await file.text();
+                try {
+                  const diagram = importDeclareXmlWithLayout(text);
+                  saveToUndoStack();
+                  setDiagram(diagram);
+                  setSelectedElement(null);
+                } catch (e) {
+                  alert('Invalid XML file.');
+                }
+                setShowImportDropdown(false);
+                event.target.value = null;
+              }} />
+            </label>
+            <label style={{ display: 'block', padding: '8px 16px', cursor: 'pointer', color: '#fff' }}>
+              Import TXT
+              <input type="file" accept=".txt" style={{ display: 'none' }} onChange={async (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+                if (!window.confirm('Importing will overwrite your current model. Continue?')) {
+                  event.target.value = null;
+                  setShowImportDropdown(false);
+                  return;
+                }
+                const text = await file.text();
+                try {
+                  const diagram = importDeclareTxtWithLayout(text);
+                  saveToUndoStack();
+                  setDiagram(diagram);
+                  setSelectedElement(null);
+                } catch (e) {
+                  alert(e && e.stack ? e.stack : (e && e.message ? e.message : String(e)));
+                }
+                setShowImportDropdown(false);
+                event.target.value = null;
+              }} />
+            </label>
+            <label style={{ display: 'block', padding: '8px 16px', cursor: 'pointer', color: '#fff' }}>
+              Import JSON
+              <input type="file" accept=".json" style={{ display: 'none' }} onChange={async (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+                if (!window.confirm('Importing will overwrite your current model. Continue?')) {
+                  event.target.value = null;
+                  setShowImportDropdown(false);
+                  return;
+                }
+                const text = await file.text();
+                try {
+                  const diagram = importDeclareJsonWithLayout(text);
+                  saveToUndoStack();
+                  setDiagram(diagram);
+                  setSelectedElement(null);
+                } catch (e) {
+                  alert('Invalid JSON file.');
+                }
+                setShowImportDropdown(false);
+                event.target.value = null;
+              }} />
+            </label>
+          </div>
+        )}
       </div>
       {/* --- Main modeler area --- */}
       <div className="condec-modeler-container" style={{
@@ -781,7 +839,7 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
           onNodeDragStart={handleNodeDragStart}
           onNodeDrag={handleNodeDrag}
           onAppend={handleAppendActivity}
-          setMode={setMode} // <-- Add this line
+          setMode={setMode}
         />
 {/* --- Render floating node menu for selected node --- */}
         {/* --- Render node edit popup if editing a node --- */}

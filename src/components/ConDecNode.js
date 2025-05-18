@@ -22,19 +22,19 @@ export function ConDecNode({
   onSelect,
   onDoubleClick,
   onDragStart,
-  onMenu,
   onRename,
-  onRenameBlur
+  onRenameBlur,
+  //onSize // <-- Add this prop to use the node resize callback
 }) {
   // Use node.editing to control initial editing state
   const [editing, setEditing] = useState(!!node.editing);
   const [editValue, setEditValue] = useState(node.name);
   const inputRef = useRef();
+  const textRef = useRef();
 
   // Check if the constraint is valid based on actual diagram (not just incomingRelationsCount)
   const isConstraintViolated = () => {
     if (!node.constraint) return false;
-    // Try to use global diagram for validation if available
     if (window?.condecDiagramForValidation) {
       const result = validateNodeConstraint(node, window.condecDiagramForValidation);
       return !result.valid;
@@ -235,7 +235,6 @@ export function ConDecNode({
                 setEditing(false);
                 setEditValue(node.name);
                 if (onRenameBlur) onRenameBlur();
-                // Optionally clear editing flag if present
                 if (node.editing) {
                   onRename(node.name, true);
                 }
@@ -251,6 +250,7 @@ export function ConDecNode({
           height={height - 20}
         >
           <div
+            ref={textRef}
             style={{
               width: '100%',
               height: '100%',

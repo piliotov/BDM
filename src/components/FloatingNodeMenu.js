@@ -41,9 +41,11 @@ export function ConDecNodeMenu({
   const actions = Object.entries(ACTION_ICONS);
 
   const ICON_SIZE = 22;
+  // Use dynamic node width/height if present (for auto-sized nodes)
   const nodeWidth = 100;
   const nodeHeight = 50;
-  const pad = 8 / zoom;
+  const pad = 7 / zoom; // Larger padding for clarity
+  // Always place menu just outside the node's bounding box
   const baseX = node.x + nodeWidth / 2 + pad;
   const baseY = node.y - nodeHeight / 2 - pad;
 
@@ -63,6 +65,25 @@ export function ConDecNodeMenu({
     padding: 0
   };
 
+  // Helper: get constraint notation string for display
+  function getConstraintNotation(node) {
+    if (!node || !node.constraint) return null;
+    switch(node.constraint) {
+      case 'absence':
+        return '0';
+      case 'absence_n':
+        return `0..${node.constraintValue || 'n'}`;
+      case 'existence_n':
+        return `${node.constraintValue || 'n'}..∗`;
+      case 'exactly_n':
+        return `${node.constraintValue || 'n'}`;
+      case 'init':
+        return 'init';
+      default:
+        return null;
+    }
+  }
+
   return (
     <>
       <style>
@@ -77,8 +98,23 @@ export function ConDecNodeMenu({
         style={{ pointerEvents: 'all' }}
         transform={`translate(${baseX},${baseY}) scale(${1/zoom})`}
       >
-        <foreignObject x={0} y={0} width={ICON_SIZE * 4} height={ICON_SIZE * 2 + 12}>
+        <foreignObject x={0} y={0} width={ICON_SIZE * 4} height={ICON_SIZE * 2 + 24}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2, background: 'none', pointerEvents: 'all', alignItems: 'left' }}>
+            {/* Constraint notation row */}
+            {getConstraintNotation(node) && (
+              <div style={{
+                fontSize: '11px',
+                color: '#333',
+                fontWeight: 600,
+                textAlign: 'center',
+                marginBottom: 2,
+                letterSpacing: 0.5,
+                userSelect: 'none',
+                lineHeight: 1.1
+              }}>
+                {getConstraintNotation(node)}
+              </div>
+            )}
             {/* First row: edit, append, delete */}
             <div style={{ display: 'flex', gap: 4 }}>
               {actions.map(([key, action]) => (

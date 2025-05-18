@@ -92,42 +92,34 @@ function getMarkerOffset(markerId) {
 export function updateRelationWaypoints(relation, diagram) {
   const sourceNode = diagram.nodes.find(n => n.id === relation.sourceId);
   const targetNode = diagram.nodes.find(n => n.id === relation.targetId);
-  
   if (!sourceNode || !targetNode) {
     return relation;
   }
-  
-  // For relations with just two points (direct), recalculate completely
+  // Always use actual node size if present
+  const sourceSize = { width: sourceNode.width || sourceNode.size?.width || 100, height: sourceNode.height || sourceNode.size?.height || 50 };
+  const targetSize = { width: targetNode.width || targetNode.size?.width || 100, height: targetNode.height || targetNode.size?.height || 50 };
   if (!relation.waypoints || relation.waypoints.length <= 2) {
-    const newWaypoints = layoutConnection(sourceNode, targetNode);
-    
+    const newWaypoints = layoutConnection(sourceNode, targetNode, sourceSize, targetSize);
     return {
       ...relation,
       waypoints: newWaypoints
     };
   }
-  
-  // For relations with custom waypoints, only update the endpoints
   const updatedWaypoints = [...relation.waypoints];
-  
   // Update source docking point
-  const sourceSize = { width: sourceNode.width || 100, height: sourceNode.height || 50 };
   const secondPoint = updatedWaypoints[1];
   updatedWaypoints[0] = getDockingPoint(
-    sourceNode, 
+    sourceNode,
     secondPoint,
     sourceSize
   );
-  
   // Update target docking point
-  const targetSize = { width: targetNode.width || 100, height: targetNode.height || 50 };
   const secondLastPoint = updatedWaypoints[updatedWaypoints.length - 2];
   updatedWaypoints[updatedWaypoints.length - 1] = getDockingPoint(
     targetNode,
     secondLastPoint,
     targetSize
   );
-  
   return {
     ...relation,
     waypoints: updatedWaypoints
@@ -145,33 +137,27 @@ export function updateRelationWaypoints(relation, diagram) {
 export function updateRelationWithFixedEndpoints(relation, waypoints, diagram) {
   const sourceNode = diagram.nodes.find(n => n.id === relation.sourceId);
   const targetNode = diagram.nodes.find(n => n.id === relation.targetId);
-  
   if (!sourceNode || !targetNode || waypoints.length < 2) {
     return { ...relation, waypoints };
   }
-
-  // Create a copy of waypoints to avoid mutating the input
   const updatedWaypoints = [...waypoints];
-  
-  // Always use the same endpoint calculation that's used for node movement
-  // Update source docking point using the same method as in updateRelationWaypoints
-  const sourceSize = { width: sourceNode.width || 100, height: sourceNode.height || 50 };
+  // Always use actual node size if present
+  const sourceSize = { width: sourceNode.width || sourceNode.size?.width , height: sourceNode.height || sourceNode.size?.height || 50 };
+  const targetSize = { width: targetNode.width || targetNode.size?.width , height: targetNode.height || targetNode.size?.height || 50 };
+  // Update source docking point
   const secondPoint = updatedWaypoints[1];
   updatedWaypoints[0] = getDockingPoint(
-    sourceNode, 
+    sourceNode,
     secondPoint,
     sourceSize
   );
-  
-  // Update target docking point using the same method as in updateRelationWaypoints
-  const targetSize = { width: targetNode.width || 100, height: targetNode.height || 50 };
+  // Update target docking point
   const secondLastPoint = updatedWaypoints[updatedWaypoints.length - 2];
   updatedWaypoints[updatedWaypoints.length - 1] = getDockingPoint(
     targetNode,
     secondLastPoint,
     targetSize
   );
-  
   return {
     ...relation,
     waypoints: updatedWaypoints
@@ -365,6 +351,32 @@ export function updateRelationLabelPosition(relation, labelOffset, diagram) {
   
   return {
     ...diagram,
+    relations: updatedRelations
+  };
+}
+
+/**
+ * Update a node's size in the diagram and update all connected relations
+ * @param {string} nodeId - The id of the node to update
+ * @param {{width: number, height: number}} newSize - The new size of the node
+ * @param {Object} diagram - The current diagram state
+ * @returns {Object} Updated diagram with node size and recalculated relations
+ */
+export function updateNodeSizeAndRelations(nodeId, newSize, diagram) {
+  // Update the node's size in the diagram
+  const updatedNodes = diagram.nodes.map(node =>
+    node.id === nodeId ? { ...node, width: newSize.width, height: newSize.height } : node
+  );
+  // Update all relations connected to this node
+  const updatedRelations = diagram.relations.map(relation => {
+    if (relation.sourceId === nodeId || relation.targetId === nodeId) {
+      return updateRelationWaypoints(relation, { ...diagram, nodes: updatedNodes });
+    }
+    return relation;
+  });
+  return {
+    ...diagram,
+    nodes: updatedNodes,
     relations: updatedRelations
   };
 }

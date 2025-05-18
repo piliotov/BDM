@@ -60,6 +60,21 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
   });
   const [relationMouse, setRelationMouse] = useState(null);
 
+  // Track latest node sizes by id
+  const [nodeSizes, setNodeSizes] = useState({});
+
+  // Callback to update node size from ConDecNode
+  const handleNodeSize = (nodeId, size) => {
+    setNodeSizes(prev => {
+      if (!size || !nodeId) return prev;
+      if (prev[nodeId] && prev[nodeId].width === size.width && prev[nodeId].height === size.height) return prev;
+      return { ...prev, [nodeId]: size };
+    });
+    if (props.onNodeSizeChange) {
+      props.onNodeSizeChange(nodeId, size);
+    }
+  };
+
   // Set up canvas panning functionality
   const { handlePanStart, handlePanMove, handlePanEnd } = useCanvasPanning({
     setCanvasOffset,
@@ -159,9 +174,10 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
         return;
       }
       
-      // --- Palette relation tool ---
+      // --- Palette relation tool: click source, then click target ---
       if (props.mode === 'addRelation') {
         if (!relationCreationState.active) {
+          // First click: set source node
           const sourceNode = diagram.nodes.find(n => n.id === nodeId);
           setRelationCreationState({
             active: true,
@@ -174,6 +190,7 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
           relationCreationState.active &&
           nodeId !== relationCreationState.sourceId
         ) {
+          // Only allow target selection if source is already set and target is different
           if (props.onRelationCreate) {
             props.onRelationCreate(relationCreationState.sourceId, nodeId);
           }
@@ -185,8 +202,11 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
           setRelationMouse(null);
           return;
         }
+        // If already active and clicking the source again, ignore (do not reset source)
         return;
       }
+      
+      // Otherwise, normal selection
       props.onSelectElement('node', nodeId);
     };
 
@@ -228,6 +248,7 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
               }
             }}
             onRenameBlur={() => {}}
+            onSize={size => handleNodeSize(node.id, size)}
           />
         </React.Fragment>
       );
@@ -240,7 +261,11 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
       selectedElement.type === 'node' &&
       (!multiSelectedNodes || !multiSelectedNodes.length)
     ) {
-      const node = nodes.find(n => n.id === selectedElement.element.id);
+      let node = nodes.find(n => n.id === selectedElement.element.id);
+      // Inject latest size if available
+      if (node && nodeSizes[node.id]) {
+        node = { ...node, ...nodeSizes[node.id] };
+      }
       if (node) {
         nodeMenu = (
           <ConDecNodeMenu
@@ -252,10 +277,9 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
             onClose={props.onNodeMenuClose}
             zoom={zoom}
             onConnect={(node) => {
-              // Enable connect-from-node-menu mode with visual feedback
               setConnectFromNodeMenu({ 
                 sourceId: node.id,
-                sourceNode: node  // Store the entire node to draw the line
+                sourceNode: node
               });
               if (props.setMode) props.setMode('connectFromNodeMenu');
             }}
@@ -266,7 +290,32 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
 
     // --- Show temporary line for relation creation modes ---
     let temporaryRelation = null;
-    
+    // Helper to get node center (x, y) from node with width/height
+    function getNodeCenter(node) {
+      return {
+        x: node.x,
+        y: node.y
+      };
+    }
+    // Helper to get node edge point for a direction (dx, dy)
+    function getNodeEdgePoint(node, dx, dy) {
+      const w = node.width || node.size?.width || 100;
+      const h = node.height || node.size?.height || 50;
+      // Normalize direction
+      const len = Math.sqrt(dx*dx + dy*dy) || 1;
+      // Rectangle edge intersection
+      const rx = w/2, ry = h/2;
+      const tx = dx / len, ty = dy / len;
+      // Find intersection with rectangle edge
+      let scale = Math.min(
+        Math.abs(rx / tx || Infinity),
+        Math.abs(ry / ty || Infinity)
+      );
+      return {
+        x: node.x + tx * scale,
+        y: node.y + ty * scale
+      };
+    }
     // For addRelation mode (palette tool)
     if (
       props.mode === 'addRelation' &&
@@ -274,17 +323,23 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
       relationCreationState.sourceNode &&
       relationMouse
     ) {
-      const sourcePoint = { x: relationCreationState.sourceNode.x, y: relationCreationState.sourceNode.y };
+      const sourceNode = relationCreationState.sourceNode;
+      const sourceCenter = getNodeCenter(sourceNode);
+      // Target point in canvas coordinates
       const targetPoint = {
         x: (relationMouse.x - (props.canvasOffset?.x || 0)) / (props.zoom || 1),
         y: (relationMouse.y - (props.canvasOffset?.y || 0)) / (props.zoom || 1)
       };
-
+      // Direction from source to target
+      const dx = targetPoint.x - sourceCenter.x;
+      const dy = targetPoint.y - sourceCenter.y;
+      // Start at edge of source node
+      const start = getNodeEdgePoint(sourceNode, dx, dy);
       temporaryRelation = (
         <>
           <line
-            x1={sourcePoint.x}
-            y1={sourcePoint.y}
+            x1={start.x}
+            y1={start.y}
             x2={targetPoint.x}
             y2={targetPoint.y}
             stroke="#1a73e8"
@@ -294,8 +349,8 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
             style={{ pointerEvents: 'none' }}
           />
           <circle
-            cx={sourcePoint.x}
-            cy={sourcePoint.y}
+            cx={start.x}
+            cy={start.y}
             r="3"
             fill="#1a73e8"
             style={{ pointerEvents: 'none' }}
@@ -311,16 +366,19 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
       props.mousePosition
     ) {
       const sourceNode = connectFromNodeMenu.sourceNode;
-      const sourcePoint = { x: sourceNode.x, y: sourceNode.y };
+      const sourceCenter = getNodeCenter(sourceNode);
       const targetPoint = {
         x: (props.mousePosition.x - (props.canvasOffset?.x || 0)) / (props.zoom || 1),
         y: (props.mousePosition.y - (props.canvasOffset?.y || 0)) / (props.zoom || 1)
       };
+      const dx = targetPoint.x - sourceCenter.x;
+      const dy = targetPoint.y - sourceCenter.y;
+      const start = getNodeEdgePoint(sourceNode, dx, dy);
       temporaryRelation = (
         <>
           <line
-            x1={sourcePoint.x}
-            y1={sourcePoint.y}
+            x1={start.x}
+            y1={start.y}
             x2={targetPoint.x}
             y2={targetPoint.y}
             stroke="#1a73e8"
@@ -330,8 +388,8 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
             style={{ pointerEvents: 'none' }}
           />
           <circle
-            cx={sourcePoint.x}
-            cy={sourcePoint.y}
+            cx={start.x}
+            cy={start.y}
             r="3"
             fill="#1a73e8"
             style={{ pointerEvents: 'none' }}
@@ -427,13 +485,12 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
     }
   };
 
-  // Enhance handleMouseUp to clear guides
+
   const handleMouseUp = (e) => {
     if (isPanning) {
       handlePanEnd();
-      return;
     }
-
+    
     if (draggedElement) {
       setDraggedElement && setDraggedElement(null);
     } else if (connectFromNodeMenu && connectFromNodeMenu.sourceId) {
@@ -575,7 +632,7 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
             top: '10px',
             left: '50%',
             transform: 'translateX(-50%)',
-            backgroundColor: 'rgba(28, 139, 14, 0.8)',
+            backgroundColor: 'rgba(25, 118, 210, 0.8)',
             color: 'white',
             padding: '8px 12px',
             borderRadius: '4px',

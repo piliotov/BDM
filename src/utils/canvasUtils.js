@@ -114,11 +114,14 @@ export function getDirection(p1, p2) {
  * @param {Object} nodeSize Node size {width, height}
  * @returns {Object} Docking point {x, y}
  */
-export function getDockingPoint(node, point, nodeSize = { width: 100, height: 50 }) {
+export function getDockingPoint(node, point, nodeSize) {
+  // Use actual node size if present
+  const width = node.width || node.size?.width || (nodeSize?.width ?? 100);
+  const height = node.height || node.size?.height || (nodeSize?.height ?? 50);
   const centerX = node.x;
   const centerY = node.y;
-  const halfWidth = nodeSize.width / 2;
-  const halfHeight = nodeSize.height / 2;
+  const halfWidth = width / 2;
+  const halfHeight = height / 2;
 
   // Vector from center to external point
   const dx = point.x - centerX;
@@ -153,15 +156,21 @@ export function getDockingPoint(node, point, nodeSize = { width: 100, height: 50
  * @returns {Array} Array of waypoints
  */
 export function createManhattanWaypoints(
-  source, 
-  target, 
-  sourceSize = { width: 100, height: 50 }, 
-  targetSize = { width: 100, height: 50 },
+  source,
+  target,
+  sourceSize,
+  targetSize,
   connectionPadding = 20
 ) {
+  // Use actual node sizes if present
+  const sWidth = source.width || source.size?.width || (sourceSize?.width ?? 100);
+  const sHeight = source.height || source.size?.height || (sourceSize?.height ?? 50);
+  const tWidth = target.width || target.size?.width || (targetSize?.width ?? 100);
+  const tHeight = target.height || target.size?.height || (targetSize?.height ?? 50);
+
   // Get source and target dock points
-  const sourceDock = getDockingPoint(source, target, sourceSize);
-  const targetDock = getDockingPoint(target, source, targetSize);
+  const sourceDock = getDockingPoint(source, target, { width: sWidth, height: sHeight });
+  const targetDock = getDockingPoint(target, source, { width: tWidth, height: tHeight });
 
   // Get horizontal and vertical distance
   const dx = targetDock.x - sourceDock.x;
@@ -399,6 +408,6 @@ export function layoutConnection(sourceNode, targetNode, existingWaypoints = [])
     ];
   }
   
-  // Otherwise use manhattan routing
-  return createManhattanWaypoints(sourceNode, targetNode);
+  // Use manhattan routing if needed
+  return createManhattanWaypoints(sourceNode, targetNode, sourceSize, targetSize);
 }
