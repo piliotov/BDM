@@ -39,7 +39,18 @@ A web-based modeling tool for creating and editing ConDec (Constraint-based Decl
    cd BDM
    ```
 
-2. **Install dependencies:**
+2. **If you do not have npm installed (Linux):**
+   ```bash
+   sudo apt update
+   sudo apt install nodejs npm
+   ```
+   You can check your installation with:
+   ```bash
+   node -v
+   npm -v
+   ```
+
+3. **Install dependencies:**
    ```bash
    npm install
    ```
