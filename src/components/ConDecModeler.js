@@ -713,7 +713,10 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
         <button
           className="modeler-btn import"
           style={{ minWidth: 100 }}
-          onClick={() => setShowImportDropdown(v => !v)}
+          onClick={e => {
+            e.stopPropagation(); // Prevent canvas click from firing
+            setShowImportDropdown(v => !v);
+          }}
           title="Import diagram"
           type="button"
           ref={importBtnRef}
@@ -816,7 +819,19 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
         position: 'relative',
         width: '100%',
         height: '100%'
-      }}>
+      }}
+        onClick={e => {
+          // Close import dropdown if open and click is outside the import button
+          if (showImportDropdown) {
+            if (
+              importBtnRef.current &&
+              !importBtnRef.current.contains(e.target)
+            ) {
+              setShowImportDropdown(false);
+            }
+          }
+        }}
+      >
         <ConDecCanvas
           ref={canvasRef}
           diagram={diagram}
