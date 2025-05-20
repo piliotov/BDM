@@ -2,22 +2,21 @@ import declareRelationTypeMap from './declareRelationTypeMap';
 import { layoutConnection } from './canvasUtils';
 
 /**
- * Import Declare TXT (Python dict format) and auto-place nodes.
+ * Import Declare TXT
  * @param {string} txt
- * @returns {Object} diagram { nodes: [], relations: [] }
+ * @returns {Object}
  */
 export function importDeclareTxtWithLayout(txt) {
-  // Step 1: Remove BOM and comments
+  // Remove BOM and comments
   let cleaned = txt.replace(/^\uFEFF/, '').replace(/\n?\s*#.*$/gm, '');
 
-  // Step 2: Replace single quotes with double quotes (for keys and values)
+  // Replace single quotes with double quotes (for keys and values)
   cleaned = cleaned.replace(/'/g, '"');
 
-  // Step 3: Convert tuple keys to string keys: ("A", "B") => "A|||B"
-  // This regex finds ("...", "...") at dict keys
+  // Convert tuple keys to string keys: ("A", "B") => "A|||B"
   cleaned = cleaned.replace(/\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*\)\s*:/g, '"$1|||$2":');
 
-  // Step 4: Now parse as JSON
+  // Now parse as JSON
   let dict;
   try {
     dict = JSON.parse(cleaned);
@@ -79,7 +78,7 @@ export function importDeclareTxtWithLayout(txt) {
             constraint: null,
             constraintValue: null
           });
-          // Save the strongest constraint (if multiple, last wins)
+          // Save the constraint 
           nodeConstraints[nodeName] = {
             constraint: normType,
             constraintValue: value[k]
@@ -100,8 +99,22 @@ export function importDeclareTxtWithLayout(txt) {
   // Create nodes array from map
   let nodes = Array.from(nodeMap.values());
 
-  // Create relations (ignore support/confidence)
-  let rels = relations.map((rel, idx) => ({
+  // Create relations
+  // Remove duplicate relations (same type, source, target)
+  const uniqueRelationSet = new Set();
+  let rels = relations.filter(rel => {
+    // For coexistence, treat (A,B) and (B,A) as the same
+    let key;
+    if (rel.type === 'coexistence') {
+      const pair = [rel.source, rel.target].sort();
+      key = `${rel.type}|||${pair[0]}|||${pair[1]}`;
+    } else {
+      key = `${rel.type}|||${rel.source}|||${rel.target}`;
+    }
+    if (uniqueRelationSet.has(key)) return false;
+    uniqueRelationSet.add(key);
+    return true;
+  }).map((rel, idx) => ({
     id: `relation_${idx}`,
     type: rel.type,
     sourceId: `activity_${rel.source}`,
@@ -128,7 +141,7 @@ export function importDeclareTxtWithLayout(txt) {
 }
 
 /**
- * Import JSON exported from the modeler, preserving all node and relation data.
+ * Import JSON exported from the modeler
  * @param {string} jsonString
  * @returns {Object} diagram { nodes: [], relations: [] }
  */
@@ -148,7 +161,6 @@ export function importDeclareJsonWithLayout(jsonString) {
 }
 
 // --- Simple force-directed layout (inspired by declare-js graphLayout) ---
-// This is a minimal implementation for non-overlapping node placement
 export function layoutNodesForceDirected(nodes, relations, iterations = 900) {
   const width = 1600, height = 1200;
   const nodeRadius = 80; // Larger for more space
@@ -160,7 +172,7 @@ export function layoutNodesForceDirected(nodes, relations, iterations = 900) {
   const initialRadius = Math.max(350, 400 + nodes.length * 10);
   nodes.forEach((n, i) => {
     const angle = (2 * Math.PI * i) / nodes.length;
-    const rand = 1 + (Math.random() - 0.5) * 0.15; // up to ±7.5% random
+    const rand = 1 + (Math.random() - 0.5) * 0.15;
     n.x = center.x + initialRadius * Math.cos(angle) * rand;
     n.y = center.y + initialRadius * Math.sin(angle) * rand;
   });
@@ -174,7 +186,6 @@ export function layoutNodesForceDirected(nodes, relations, iterations = 900) {
         const ny = nodes[i].y - nodes[j].y;
         const dist = Math.sqrt(nx * nx + ny * ny) || 0.01;
         if (dist < minSep) {
-          // Stronger repulsion for close nodes
           dx += (nx / dist) * (minSep - dist) * 1.5;
           dy += (ny / dist) * (minSep - dist) * 1.5;
         }
@@ -249,18 +260,15 @@ export function importDeclareXmlWithLayout(xmlString) {
     constraint: null,
     constraintValue: null
   }));
-  // For quick lookup
   const nodeMap = new Map(nodes.map(n => [n.name, n]));
 
   const constraintNodes = Array.from(xml.querySelectorAll('constraintdefinitions > constraint'));
   const relations = [];
   constraintNodes.forEach((c, idx) => {
     let type = c.querySelector('name')?.textContent || 'unknown';
-    // Normalize type
     type = declareRelationTypeMap[type.trim().toLowerCase()] || type.trim().toLowerCase();
     const params = Array.from(c.querySelectorAll('constraintparameters > parameter'));
     if (params.length === 2) {
-      // For Declare, the first parameter is usually the target, the second is the source
       const target = params[0].querySelector('branch')?.getAttribute('name');
       const source = params[1].querySelector('branch')?.getAttribute('name');
       if (source && target) {
@@ -281,14 +289,11 @@ export function importDeclareXmlWithLayout(xmlString) {
         const template = c.querySelector('template');
         let value = null;
         if (template) {
-          // Try to parse display like "1..*" or "0..n" or just a number
           const display = template.querySelector('display')?.textContent;
           if (display) {
-            // For existence, if display is '1..*' or '1..n', set value=1
             if (type === 'existence' && /^1\.\./.test(display)) {
               value = 1;
             } else {
-              // Try to extract a number from display
               const match = display.match(/(\d+)/);
               if (match) value = parseInt(match[1], 10);
             }

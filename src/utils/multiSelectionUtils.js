@@ -1,5 +1,5 @@
 // Returns array of nodes fully inside the selection rectangle
-export function getNodesInSelectionBox(nodes, selectionBox) {
+export function getNodesInMultiSelectionBox(nodes, selectionBox) {
   if (!selectionBox) return [];
   return nodes.filter(node => {
     const nodeLeft = node.x - 50;
@@ -16,7 +16,7 @@ export function getNodesInSelectionBox(nodes, selectionBox) {
 }
 
 // Returns bounding box {x, y, width, height} for a list of nodes
-export function getBoundingBoxForNodes(nodes) {
+export function getBoundingBoxForMultiSelectedNodes(nodes) {
   if (!nodes || nodes.length === 0) return null;
   const left = Math.min(...nodes.map(n => n.x - 50));
   const right = Math.max(...nodes.map(n => n.x + 50));

@@ -35,6 +35,7 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [panOrigin, setPanOrigin] = useState({ x: 0, y: 0 });
   const [showImportDropdown, setShowImportDropdown] = useState(false);
+  const [multiSelectedNodes, setMultiSelectedNodes] = useState([]);
   
   // Calculate the center offset based on window size
   const [canvasOffset, setCanvasOffset] = useState({ x: 0, y: 0 });
@@ -108,7 +109,7 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
             padding: '8px',
             margin: '2px 0',
             borderRadius: '4px',
-            background: mode === 'select' ? '#e3f2fd' : 'transparent',
+            background: mode === 'multiselect' ? '#e3f2fd' : 'transparent',
             display: 'flex',
             justifyContent: 'center',
             alignItems: 'center'
@@ -253,6 +254,23 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
     }
     setSelectedElement(null);
   }, [selectedElement, diagram, saveToUndoStack]);
+
+  // Handle delete for multi-selected nodes
+  const handleDeleteMultiSelected = (nodesToDelete) => {
+    if (!nodesToDelete || nodesToDelete.length === 0) return;
+    saveToUndoStack();
+    const nodeIds = nodesToDelete.map(n => n.id);
+    const updatedNodes = diagram.nodes.filter(n => !nodeIds.includes(n.id));
+    const updatedRelations = diagram.relations.filter(
+      r => !nodeIds.includes(r.sourceId) && !nodeIds.includes(r.targetId)
+    );
+    setDiagram({
+      ...diagram,
+      nodes: updatedNodes,
+      relations: updatedRelations
+    });
+    setMultiSelectedNodes([]);
+  };
 
   // Handle keyboard shortcuts
   useEffect(() => {
@@ -824,6 +842,9 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
           zoom={zoom}
           onCanvasWheel={handleCanvasWheel}
           selectionBox={selectionBox}
+          setSelectionBox={setSelectionBox}
+          multiSelectedNodes={multiSelectedNodes}
+          setMultiSelectedNodes={setMultiSelectedNodes}
           onNodeMenuEdit={node => {
             setEditNodePopup({ node: { ...node } });
             setEditNodePopupPos({ x: null, y: null });
@@ -840,6 +861,7 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
           onNodeDrag={handleNodeDrag}
           onAppend={handleAppendActivity}
           setMode={setMode}
+          onDeleteMultiSelected={handleDeleteMultiSelected}
         />
 {/* --- Render floating node menu for selected node --- */}
         {/* --- Render node edit popup if editing a node --- */}

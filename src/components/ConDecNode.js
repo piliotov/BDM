@@ -244,29 +244,35 @@ export function ConDecNode({
         </foreignObject>
       ) : (
         <foreignObject
-          x={x - width/2 + 4}
-          y={y - height/2 + 16}
-          width={width - 8}
-          height={height - 20}
+          x={x - width/2}
+          y={y - height/2}
+          width={width}
+          height={height}
+          style={{ overflow: 'visible', pointerEvents: 'none' }}
         >
           <div
             ref={textRef}
             style={{
               width: '100%',
-              height: '100%',
+              minHeight: '100%',
+              maxHeight: 'none',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               textAlign: 'center',
-              fontSize: '12px',
+              fontSize: '10px',
               color: constraintViolated ? '#d32f2f' : '#222',
               fontWeight: constraintViolated ? 'bold' : 'normal',
               wordBreak: 'break-word',
-              overflow: 'hidden',
-              lineHeight: '1.2',
+              lineHeight: 1.2,
+              background: 'transparent',
               userSelect: 'none',
               pointerEvents: 'none',
-              background: 'transparent'
+              overflow: 'visible',
+              position: 'relative',
+              zIndex: 1,
+              flexDirection: 'column',
+              whiteSpace: 'pre-wrap'
             }}
           >
             {node.name}

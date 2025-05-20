@@ -6,10 +6,8 @@ import { calculateIntersectionPoint } from '../utils/geometryUtils';
 import { useCanvasPanning } from '../utils/canvasUtils';
 import { updateRelationsForNode, updateRelationWithFixedEndpoints } from '../utils/relationUtils';
 import { RelationMarkers } from '../utils/relationIconUtils';
-import {
-  endConnectMode,
-  getConnectModeState,
-} from '../utils/connectModeUtils';
+import { endConnectMode,getConnectModeState,} from '../utils/connectModeUtils';
+import { getNodesInMultiSelectionBox, getBoundingBoxForMultiSelectedNodes } from '../utils/multiSelectionUtils';
 
 export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
   const {
@@ -36,8 +34,6 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
     panOrigin = { x: 0, y: 0 },
     setPanOrigin,
     multiSelectedNodes = [],
-    renderMultiSelectBoundingBox,
-    renderMultiSelectMenu,
     saveToUndoStack,
   } = props;
 
@@ -85,8 +81,83 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
     zoom
   });
 
+  // --- Lasso (multi-select) state ---
+  const [lassoStart, setLassoStart] = useState(null);
+  const [lassoBox, setLassoBox] = useState(null);
+  const lassoActive = mode === 'select';
+  // Track if lasso was started on empty canvas
+  const lassoStartedOnCanvas = useRef(false);
+
+  // --- Multi-select drag state ---
+  const [multiDragStart, setMultiDragStart] = useState(null);
+
+  // --- Lasso mouse handlers (bpmn-js style) ---
+  function handleLassoMouseDown(e) {
+    if (!lassoActive) return;
+    // Only left mouse button
+    if (e.button !== 0) return;
+    // Only start lasso if clicking on empty canvas (not on node/relation)
+    if (!e.target.classList.contains('condec-canvas')) return;
+    const rect = svgRef.current.getBoundingClientRect();
+    const x = (e.clientX - rect.left - canvasOffset.x) / zoom;
+    const y = (e.clientY - rect.top - canvasOffset.y) / zoom;
+    setLassoStart({ x, y });
+    setLassoBox({ x, y, width: 0, height: 0 });
+    lassoStartedOnCanvas.current = true;
+    if (props.setSelectionBox) props.setSelectionBox(null);
+    if (props.setMultiSelectedNodes) props.setMultiSelectedNodes([]);
+    e.stopPropagation();
+  }
+
+  function handleLassoMouseMove(e) {
+    if (!lassoActive || !lassoStart || !lassoStartedOnCanvas.current) return;
+    const rect = svgRef.current.getBoundingClientRect();
+    const x = (e.clientX - rect.left - canvasOffset.x) / zoom;
+    const y = (e.clientY - rect.top - canvasOffset.y) / zoom;
+    const box = {
+      x: Math.min(lassoStart.x, x),
+      y: Math.min(lassoStart.y, y),
+      width: Math.abs(x - lassoStart.x),
+      height: Math.abs(y - lassoStart.y)
+    };
+    setLassoBox(box);
+    if (props.setSelectionBox) props.setSelectionBox(box);
+    // Update multi-selected nodes live
+    if (props.setMultiSelectedNodes && diagram?.nodes) {
+      const selected = getNodesInMultiSelectionBox(diagram.nodes, box);
+      props.setMultiSelectedNodes(selected);
+    }
+    e.stopPropagation();
+  }
+
+  function handleLassoMouseUp(e) {
+    if (!lassoActive || !lassoStart || !lassoStartedOnCanvas.current) {
+      setLassoStart(null);
+      setLassoBox(null);
+      lassoStartedOnCanvas.current = false;
+      return;
+    }
+    setLassoStart(null);
+    setLassoBox(null);
+    lassoStartedOnCanvas.current = false;
+    if (props.setSelectionBox) props.setSelectionBox(null);
+    // Finalize selection (already set live)
+    e.stopPropagation();
+  }
+
   // --- Node drag/relation logic ---
   const handleNodeInteractionStart = (nodeId, e) => {
+    // If multi-select is active and node is in selection, start group drag
+    if (multiSelectedNodes && multiSelectedNodes.length > 1 && multiSelectedNodes.find(n => n.id === nodeId)) {
+      setMultiDragStart({
+        nodeIds: multiSelectedNodes.map(n => n.id),
+        startX: e.clientX,
+        startY: e.clientY,
+        nodePositions: multiSelectedNodes.map(n => ({ id: n.id, x: n.x, y: n.y }))
+      });
+      e.stopPropagation();
+      return;
+    }
     if (mode === 'addRelation') {
       // Only allow setting source if not already active
       if (!relationCreationState.active) {
@@ -108,6 +179,159 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
       });
     }
   };
+
+  // Helper: find alignment lines for any point (node center, relation waypoint, or relation midpoint)
+  function getAlignmentGuidesForPoint(point, nodes, relations, excludeRelationId = null) {
+    if (!point) return { x: null, y: null };
+    const threshold = 2;
+    let guideX = null, guideY = null;
+    // Check node centers
+    for (const n of nodes) {
+      if (Math.abs(n.x - point.x) <= threshold) guideX = n.x;
+      if (Math.abs(n.y - point.y) <= threshold) guideY = n.y;
+    }
+    // Check relation waypoints and midpoints
+    for (const rel of relations) {
+      if (rel.id === excludeRelationId) continue;
+      if (Array.isArray(rel.waypoints)) {
+        for (const wp of rel.waypoints) {
+          if (Math.abs(wp.x - point.x) <= threshold) guideX = wp.x;
+          if (Math.abs(wp.y - point.y) <= threshold) guideY = wp.y;
+        }
+        // Check midpoint of the relation path
+        if (rel.waypoints.length >= 2) {
+          const midIdx = Math.floor(rel.waypoints.length / 2);
+          let mid;
+          if (rel.waypoints.length % 2 === 0) {
+            // Even: average two middle points
+            const a = rel.waypoints[midIdx - 1], b = rel.waypoints[midIdx];
+            mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+          } else {
+            mid = rel.waypoints[midIdx];
+          }
+          if (Math.abs(mid.x - point.x) <= threshold) guideX = mid.x;
+          if (Math.abs(mid.y - point.y) <= threshold) guideY = mid.y;
+        }
+      }
+    }
+    return { x: guideX, y: guideY };
+  }
+
+  // Handler for alignment check from relation drag
+  const handleAlignmentCheck = (point, relationId = null) => {
+    const guides = getAlignmentGuidesForPoint(point, diagram.nodes, diagram.relations, relationId);
+    setAlignmentGuides(guides);
+  };
+
+  // --- Render alignment guides as SVG lines ---
+  function renderAlignmentGuides() {
+    if (!alignmentGuides.x && !alignmentGuides.y) return null;
+    // Get canvas bounds
+    const minX = 0, minY = 0;
+    // Use a large max value to cover the visible area
+    const maxX = 4000, maxY = 2000;
+    return (
+      <g className="alignment-guides">
+        {alignmentGuides.x !== null && (
+          <line
+            x1={alignmentGuides.x}
+            y1={minY}
+            x2={alignmentGuides.x}
+            y2={maxY}
+            stroke="#1a73e8"
+            strokeDasharray="6,4"
+            strokeWidth={2}
+            pointerEvents="none"
+          />
+        )}
+        {alignmentGuides.y !== null && (
+          <line
+            x1={minX}
+            y1={alignmentGuides.y}
+            x2={maxX}
+            y2={alignmentGuides.y}
+            stroke="#1a73e8"
+            strokeDasharray="6,4"
+            strokeWidth={2}
+            pointerEvents="none"
+          />
+        )}
+      </g>
+    );
+  }
+
+  // --- Multi-select bounding box and menu ---
+  function renderMultiSelectBoundingBox() {
+    if (!multiSelectedNodes || multiSelectedNodes.length < 2) return null;
+    const box = getBoundingBoxForMultiSelectedNodes(multiSelectedNodes);
+    if (!box) return null;
+    return (
+      <g className="multi-select-bounding-box">
+        <rect
+          x={box.x - 10}
+          y={box.y - 10}
+          width={box.width + 20}
+          height={box.height + 20}
+          fill="transparent"
+          stroke="#4285f4"
+          strokeWidth={2/zoom}
+          strokeDasharray={`${4/zoom},${2/zoom}`}
+          rx={8/zoom}
+          pointerEvents="none"
+        />
+      </g>
+    );
+  }
+
+  function renderMultiSelectMenu() {
+    if (!multiSelectedNodes || multiSelectedNodes.length < 2) return null;
+    const box = getBoundingBoxForMultiSelectedNodes(multiSelectedNodes);
+    if (!box) return null;
+    const menuX = box.x + box.width + 18;
+    const menuY = box.y - 32;
+    function handleDeleteAll() {
+      if (typeof props.onDeleteMultiSelected === 'function') {
+        props.onDeleteMultiSelected(multiSelectedNodes);
+      }
+    }
+    return (
+      <foreignObject x={menuX} y={menuY} width={40} height={40} style={{ overflow: 'visible' }}>
+        <div style={{
+          background: 'none',
+          border: 'none',
+          borderRadius: 0,
+          boxShadow: 'none',
+          padding: 0,
+          color: '#1976d2',
+          fontWeight: 500,
+          fontSize: 15,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          zIndex: 1000
+        }}>
+          <button
+            style={{
+              background: 'none',
+              border: 'none',
+              borderRadius: 4,
+              padding: '4px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginLeft: 4
+            }}
+            onClick={handleDeleteAll}
+            tabIndex={0}
+            title="Delete selected nodes"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 2048 2048"><path fill="currentColor" d="m387.16 644.33l128.932 1231.742h1024.733l118.83-1231.51h-1272.5zm144.374 130.007h985.481l-94.107 971.506h-789.33z"/><path fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.344" d="m7.033 1040.98l.944 7.503m5.013-7.503l-.943 7.503" transform="matrix(96.7529 0 0 87.18526 55.328 -89814.987)"/><path fill="currentColor" d="M758.125 337.314L343.5 458.662v60.722h1361v-60.722l-419.687-121.348z"/><path fill="currentColor" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="69.952" d="M793.259 211.429h461.482v168.06H793.26z"/></svg>
+          </button>
+        </div>
+      </foreignObject>
+    );
+  }
 
   // --- Render nodes/relations with z-index management ---
   const renderDiagramElements = () => {
@@ -157,6 +381,8 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
           canvasOffset={canvasOffset}
           zoom={zoom}
           saveToUndoStack={saveToUndoStack}
+          allNodes={nodes} // pass all nodes for n-ary rendering
+          onAlignmentCheck={handleAlignmentCheck} // <-- pass alignment check handler
         />
       );
     });
@@ -190,7 +416,6 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
           relationCreationState.active &&
           nodeId !== relationCreationState.sourceId
         ) {
-          // Only allow target selection if source is already set and target is different
           if (props.onRelationCreate) {
             props.onRelationCreate(relationCreationState.sourceId, nodeId);
           }
@@ -214,12 +439,13 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
       const isSelected = !multiSelectedNodes.length && selectedElement &&
         selectedElement.type === 'node' &&
         selectedElement.element.id === node.id;
-      
+      const isMultiSelected = multiSelectedNodes && multiSelectedNodes.find(n => n.id === node.id);
       return (
         <React.Fragment key={node.id}>
           <ConDecNode
             node={node}
             isSelected={isSelected}
+            isMultiSelected={!!isMultiSelected}
             mode={props.mode}
             onSelect={(e) => handleNodeClick(node.id, e)}
             onDoubleClick={() => {}}
@@ -400,6 +626,7 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
 
     return (
       <>
+        {renderAlignmentGuides()}
         {relationElements}
         {temporaryRelation}
         {nodeElements}
@@ -427,7 +654,33 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
   }
 
   // Enhance handleMouseMove to show alignment guides and update temporary relation
-  const handleMouseMove = (e) => {
+  function handleMouseMove(e) {
+    if (lassoActive && lassoStart && lassoStartedOnCanvas.current) {
+      handleLassoMouseMove(e);
+      return;
+    }
+    // Multi-drag
+    if (multiDragStart) {
+      const deltaX = (e.clientX - multiDragStart.startX) / zoom;
+      const deltaY = (e.clientY - multiDragStart.startY) / zoom;
+      const updatedNodes = diagram.nodes.map(node => {
+        const dragNode = multiDragStart.nodePositions.find(n => n.id === node.id);
+        if (dragNode) {
+          return { ...node, x: dragNode.x + deltaX, y: dragNode.y + deltaY };
+        }
+        return node;
+      });
+      if (typeof onNodeEdit === 'function') {
+        onNodeEdit(updatedNodes);
+      }
+      // Optionally update relations
+      if (typeof onRelationEdit === 'function') {
+        onRelationEdit(diagram.relations);
+      }
+      // Update last mouse position for bounding box
+      setMultiDragStart(prev => prev ? { ...prev, lastClientX: e.clientX, lastClientY: e.clientY } : prev);
+      return;
+    }
     const rect = svgRef.current.getBoundingClientRect();
     const currentX = e.clientX - rect.left;
     const currentY = e.clientY - rect.top;
@@ -483,15 +736,46 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
         onSelectionMouseMove && onSelectionMouseMove(e);
       }
     }
-  };
+  }
 
-
-  const handleMouseUp = (e) => {
+  function handleMouseUp(e) {
+    if (lassoActive && lassoStart && lassoStartedOnCanvas.current) {
+      handleLassoMouseUp(e);
+      return;
+    }
+    if (multiDragStart) {
+      // Only save to undo stack if there was actual movement
+      const deltaX = (multiDragStart.lastClientX !== undefined ? multiDragStart.lastClientX : multiDragStart.startX) - multiDragStart.startX;
+      const deltaY = (multiDragStart.lastClientY !== undefined ? multiDragStart.lastClientY : multiDragStart.startY) - multiDragStart.startY;
+      const moved = deltaX !== 0 || deltaY !== 0;
+      const updatedNodes = diagram.nodes.map(node => {
+        const dragNode = multiDragStart.nodePositions.find(n => n.id === node.id);
+        if (dragNode) {
+          return { ...node, x: dragNode.x + deltaX / zoom, y: dragNode.y + deltaY / zoom };
+        }
+        return node;
+      });
+      if (typeof onNodeEdit === 'function') {
+        onNodeEdit(updatedNodes);
+      }
+      setMultiDragStart(null);
+      // Update selection to new node positions
+      if (props.setMultiSelectedNodes) {
+        const newSelection = updatedNodes.filter(n => multiDragStart.nodeIds.includes(n.id));
+        props.setMultiSelectedNodes(newSelection);
+      }
+      if (moved && saveToUndoStack) saveToUndoStack();
+      return;
+    }
     if (isPanning) {
       handlePanEnd();
     }
-    
     if (draggedElement) {
+      // Only save to undo stack if there was actual movement
+      const deltaX = (e.clientX - draggedElement.startX) / zoom;
+      const deltaY = (e.clientY - draggedElement.startY) / zoom;
+      const moved = deltaX !== 0 || deltaY !== 0;
+      if (moved && saveToUndoStack) saveToUndoStack();
       setDraggedElement && setDraggedElement(null);
     } else if (connectFromNodeMenu && connectFromNodeMenu.sourceId) {
       const targetElement = e.target.closest('.condec-node');
@@ -507,7 +791,7 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
       onSelectionMouseUp && onSelectionMouseUp(e);
     }
     setAlignmentGuides({ x: null, y: null });
-  };
+  }
 
   const handleCanvasClick = (e) => {
     if (!e.target.classList.contains('condec-canvas')) {
@@ -546,6 +830,18 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
       return;
     }
     
+    if (mode === 'hand') {
+      // Clear multi-selection if present
+      if (props.setMultiSelectedNodes && multiSelectedNodes && multiSelectedNodes.length > 0) {
+        props.setMultiSelectedNodes([]);
+      }
+      // Clear single node selection if present
+      if (selectedElement && selectedElement.type === 'node' && props.onSelectElement) {
+        props.onSelectElement(null);
+      }
+      return;
+    }
+    
     if (getConnectModeState().isActive) {
       endConnectMode();
       return;
@@ -554,17 +850,19 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
     if (onCanvasClick) onCanvasClick(e);
   };
 
-  const handleCanvasMouseDown = (e) => {
-    // Start panning if in hand mode and left mouse button is pressed
+  function handleCanvasMouseDown(e) {
+    if (lassoActive) {
+      handleLassoMouseDown(e);
+      return;
+    }
     if (mode === 'hand' && e.button === 0 && e.target.classList.contains('condec-canvas')) {
       handlePanStart(e);
       return;
     }
-    // Otherwise, delegate to the provided handler
     if (props.onCanvasMouseDown) {
       props.onCanvasMouseDown(e);
     }
-  };
+  }
 
   const handleWaypointDrag = (relationId, waypoints, updatedRelations) => {
     if (!relationId) return;
@@ -595,22 +893,43 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
     onRelationEdit && onRelationEdit(updatedRelationsList);
   };
 
-  const handleWaypointDragEnd = (relationId, isLabelDrag = false) => {
+  const handleWaypointDragEnd = (relationId, isLabelDrag = false, prevWaypoints = null) => {
     if (!relationId) return;
-
     if (typeof onRelationEdit === 'function' && diagram.relations) {
-      saveToUndoStack && saveToUndoStack();
-      
+      // Only save to undo stack if waypoints actually changed
       const relation = diagram.relations.find(r => r.id === relationId);
-      if (relation) {
-        const updatedRelations = diagram.relations.map(r => 
-          r.id === relationId ? relation : r
-        );
-        
-        onRelationEdit(updatedRelations);
+      if (relation && prevWaypoints && Array.isArray(relation.waypoints) && Array.isArray(prevWaypoints)) {
+        const changed = relation.waypoints.length !== prevWaypoints.length ||
+          relation.waypoints.some((wp, i) => !prevWaypoints[i] || wp.x !== prevWaypoints[i].x || wp.y !== prevWaypoints[i].y);
+        if (changed && saveToUndoStack) saveToUndoStack();
+      } else if (saveToUndoStack) {
+        // Fallback: always save if no previous waypoints provided
+        saveToUndoStack();
       }
+      const updatedRelations = diagram.relations.map(r =>
+        r.id === relationId ? relation : r
+      );
+      onRelationEdit(updatedRelations);
     }
   };
+
+  // --- Render lasso rectangle ---
+  function renderLassoBox() {
+    if (!lassoBox) return null;
+    return (
+      <rect
+        x={lassoBox.x}
+        y={lassoBox.y}
+        width={lassoBox.width}
+        height={lassoBox.height}
+        fill="rgba(66, 133, 244, 0.1)"
+        stroke="#4285f4"
+        strokeWidth={1/zoom}
+        strokeDasharray={`${4/zoom},${2/zoom}`}
+        pointerEvents="none"
+      />
+    );
+  }
 
   let cursorStyle = 'default';
   if (mode === 'hand') {
@@ -702,6 +1021,7 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
               pointerEvents="none"
             />
           )}
+          {renderLassoBox()}
         </g>
       </svg>
     </div>
