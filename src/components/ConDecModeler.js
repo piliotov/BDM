@@ -320,7 +320,7 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
     setMode('hand'); // Switch back to hand mode on selection
   };
 
-  // --- Node drag start: save to undo stack ---
+  // --- Node drag start ---
   const handleNodeDragStart = (nodeId, e) => {
     saveToUndoStack();
     setDraggedElement({
@@ -332,7 +332,7 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
     });
   };
 
-  // --- Node drag: update position, but do NOT save to undo stack here ---
+  // --- Node drag: update position ---
   const handleNodeDrag = (nodeId, dragEvent) => {
     if (!diagram || !nodeId) return;
     const node = diagram.nodes.find(n => n.id === nodeId);
