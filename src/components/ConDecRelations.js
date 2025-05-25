@@ -75,9 +75,18 @@ export function ConDecRelation({
         x: (svgPoint.x - canvasOffset.x) / zoom,
         y: (svgPoint.y - canvasOffset.y) / zoom
       };
-      setCurrentWaypoints(updatedWaypoints);
-      if (onWaypointDrag) {
-        onWaypointDrag(relation.id, updatedWaypoints);
+      // Always recalc endpoints after drag
+      if (typeof onWaypointDrag === 'function') {
+        const mockDiagram = { nodes: [sourceNode, targetNode], relations: [relation] };
+        const updatedRelation = require('../utils/relationUtils').updateRelationWithFixedEndpoints(
+          relation,
+          updatedWaypoints,
+          mockDiagram
+        );
+        setCurrentWaypoints(updatedRelation.waypoints);
+        onWaypointDrag(relation.id, updatedRelation.waypoints, [updatedRelation]);
+      } else {
+        setCurrentWaypoints(updatedWaypoints);
       }
       // Alignment check for waypoint drag
       if (typeof onAlignmentCheck === 'function') {
@@ -90,7 +99,6 @@ export function ConDecRelation({
       if (onWaypointDragEnd) {
         onWaypointDragEnd(relation.id);
       }
-      // Clear alignment guides
       if (typeof onAlignmentCheck === 'function') {
         onAlignmentCheck(null, relation.id);
       }
@@ -596,19 +604,67 @@ export function ConDecRelation({
 
       {/* Control points - only visible when selected */}
       {isSelected && currentWaypoints.map((point, index) => (
-        <rect
-          key={`wp-${index}`}
-          x={point.x - controlPointSize/2}
-          y={point.y - controlPointSize/2}
-          width={controlPointSize}
-          height={controlPointSize}
-          fill={draggedWaypointIndex === index ? "#f44336" : "#1a73e8"}
-          stroke="#fff"
-          strokeWidth={1/zoom}
-          cursor="move"
-          onMouseDown={(e) => handleWaypointMouseDown(index, e)}
-          pointerEvents="all" // Ensure click events work on this element
-        />
+        <g key={`wp-group-${index}`}>
+          <rect
+            x={point.x - controlPointSize/2}
+            y={point.y - controlPointSize/2}
+            width={controlPointSize}
+            height={controlPointSize}
+            fill={draggedWaypointIndex === index ? "#f44336" : "#1a73e8"}
+            stroke="#fff"
+            strokeWidth={1/zoom}
+            cursor="move"
+            onMouseDown={(e) => handleWaypointMouseDown(index, e)}
+            pointerEvents="all"
+          />
+          {/* Remove button for interior waypoints */}
+          {index > 0 && index < currentWaypoints.length - 1 && (
+            <g
+              style={{ cursor: 'pointer' }}
+              onMouseDown={e => {
+                e.stopPropagation();
+                // Remove this waypoint and update relation with fixed endpoints
+                const newWaypoints = currentWaypoints.filter((_, i) => i !== index);
+                // Use updateRelationWithFixedEndpoints to recalc endpoints
+                if (typeof onWaypointDrag === 'function') {
+                  // Use a mock diagram for endpoint calculation
+                  const mockDiagram = { nodes: [sourceNode, targetNode], relations: [relation] };
+                  const updatedRelation = require('../utils/relationUtils').updateRelationWithFixedEndpoints(
+                    relation,
+                    newWaypoints,
+                    mockDiagram
+                  );
+                  setCurrentWaypoints(updatedRelation.waypoints);
+                  onWaypointDrag(relation.id, updatedRelation.waypoints, [updatedRelation]);
+                  if (typeof onWaypointDragEnd === 'function') {
+                    onWaypointDragEnd(relation.id);
+                  }
+                }
+              }}
+            >
+              <circle
+                cx={point.x}
+                cy={point.y - 14 / zoom}
+                r={6 / zoom}
+                fill="#fff"
+                stroke="#f44336"
+                strokeWidth={1/zoom}
+              />
+              <text
+                x={point.x}
+                y={point.y - 14 / zoom + 2/zoom}
+                textAnchor="middle"
+                fontSize={`${10/zoom}px`}
+                fill="#f44336"
+                fontWeight="bold"
+                pointerEvents="none"
+                style={{ userSelect: 'none' }}
+              >
+                ×
+              </text>
+            </g>
+          )}
+        </g>
       ))}
       
       {/* Add waypoint button (middle of each segment) - only when selected */}

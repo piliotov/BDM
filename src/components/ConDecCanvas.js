@@ -23,15 +23,12 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
     canvasOffset = { x: 0, y: 0 },
     setCanvasOffset,
     onSelectionMouseMove,
-    onSelectionMouseUp,
     zoom = 1,
     onCanvasWheel,
     selectionBox,
     isPanning = false,
     setIsPanning,
-    panStart = { x: 0, y: 0 },
     setPanStart,
-    panOrigin = { x: 0, y: 0 },
     setPanOrigin,
     multiSelectedNodes = [],
     saveToUndoStack,
@@ -81,7 +78,7 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
   };
 
   // Set up canvas panning functionality
-  const { handlePanStart, handlePanMove, handlePanEnd } = useCanvasPanning({
+  const { handlePanStart, /*handlePanMove,*/ handlePanEnd } = useCanvasPanning({
     setCanvasOffset,
     setIsPanning,
     setPanStart,
@@ -158,7 +155,7 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
       props.setMultiSelectedNodes(selected);
     }
     // Do NOT clear multi-selection or selectedElement here!
-    e.stopPropagation();
+    // e.stopPropagation(); // (optional, can be left out)
   }
 
   // --- Node drag/relation logic ---
@@ -1073,13 +1070,7 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
 
       // In select mode, clicking empty canvas clears multi-selection but keeps mode
       if (mode === 'select') {
-        if (props.setMultiSelectedNodes && multiSelectedNodes && multiSelectedNodes.length > 0) {
-          props.setMultiSelectedNodes([]);
-        }
-        // Clear single selection but keep select mode active
-        if (selectedElement && props.onSelectElement) {
-          props.onSelectElement(null);
-        }
+        // Do NOT clear multi-selection or single selection here!
         return;
       }
 
@@ -1104,12 +1095,14 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
   };
 
   function handleCanvasMouseDown(e) {
-    if (lassoActive) {
-      handleLassoMouseDown(e);
-      return;
-    }
+    // Allow panning in hand mode
     if (mode === 'hand' && e.button === 0 && e.target.classList.contains('condec-canvas')) {
       handlePanStart(e);
+      return;
+    }
+    // Only activate lasso in select mode
+    if (mode === 'select' && lassoActive) {
+      handleLassoMouseDown(e);
       return;
     }
     if (props.onCanvasMouseDown) {
@@ -1118,6 +1111,8 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
   }
 
   // Handle diamond dragging
+  // Extract diagram.relations for useEffect dependency
+  const diagramRelations = diagram && diagram.relations;
   useEffect(() => {
     if (!draggedDiamond || !diagram || !Array.isArray(diagram.relations)) return;
     const handleMouseMove = (e) => {
@@ -1146,7 +1141,7 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [draggedDiamond, diagram && diagram.relations, onRelationEdit, zoom, saveToUndoStack]);
+  }, [draggedDiamond, diagram, diagramRelations, onRelationEdit, zoom, saveToUndoStack]);
 
   // --- Render lasso rectangle ---
   function renderLassoBox() {

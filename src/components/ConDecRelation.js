@@ -215,6 +215,52 @@ export function ConDecRelation({
     };
   }, [isDragging, draggedPoint, currentWaypoints, relation, onWaypointDrag, onWaypointDragEnd, canvasOffset, zoom, sourceNode, targetNode]);
 
+  // Handle waypoint drag (for interior points only)
+  useEffect(() => {
+    if (draggedPoint === null) return;
+    const handleMouseMove = (e) => {
+      const svg = document.querySelector('svg.condec-canvas');
+      if (!svg) return;
+      const rect = svg.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+      // Convert to diagram coordinates
+      const x = (mouseX - canvasOffset.x) / zoom;
+      const y = (mouseY - canvasOffset.y) / zoom;
+      // Only move interior waypoints (not endpoints)
+      if (draggedPoint > 0 && draggedPoint < currentWaypoints.length - 1) {
+        const newWaypoints = [...currentWaypoints];
+        newWaypoints[draggedPoint] = { x, y };
+        // Recalculate endpoints so they stay on the node circumference
+        const mockDiagram = {
+          nodes: [sourceNode, targetNode],
+          relations: [relation]
+        };
+        const updatedRelation = updateRelationWithFixedEndpoints(
+          relation,
+          newWaypoints,
+          mockDiagram
+        );
+        setCurrentWaypoints(updatedRelation.waypoints);
+        if (onWaypointDrag) {
+          onWaypointDrag(relation.id, updatedRelation.waypoints, [updatedRelation]);
+        }
+      }
+    };
+    const handleMouseUp = () => {
+      setDraggedPoint(null);
+      if (onWaypointDragEnd) {
+        onWaypointDragEnd(relation.id);
+      }
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [draggedPoint, currentWaypoints, relation, sourceNode, targetNode, canvasOffset, zoom, onWaypointDrag, onWaypointDragEnd]);
+
   // --- Make relation label draggable ---
   const handleLabelMouseDown = (e) => {
     if (!isSelected) return;
