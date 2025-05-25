@@ -10,6 +10,8 @@ import { appendActivityAndConnect } from '../utils/append-action';
 import RelationEditMenu from './RelationEditMenu';
 import { NodeEditMenu } from './NodeEditMenu';
 import { importDeclareTxtWithLayout, importDeclareXmlWithLayout, importDeclareJsonWithLayout } from '../utils/declareImportUtils';
+import { NaryMenu } from './NaryRelation';
+import { NaryRelationEditMenu } from './NaryRelationEditMenu';
 
 // Constants for local storage
 const LOCAL_STORAGE_KEY = 'condec-diagram';
@@ -30,13 +32,15 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [selectionBox, setSelectionBox] = useState(null);
-  const [selectionStart, setSelectionStart] = useState(null);
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [panOrigin, setPanOrigin] = useState({ x: 0, y: 0 });
   const [showImportDropdown, setShowImportDropdown] = useState(false);
   const [multiSelectedNodes, setMultiSelectedNodes] = useState([]);
-  
+  const [naryStartNode, setNaryStartNode] = useState(null);
+  const [naryMouse, setNaryMouse] = useState(null);
+  const [naryMenu, setNaryMenu] = useState(null);
+
   // Calculate the center offset based on window size
   const [canvasOffset, setCanvasOffset] = useState({ x: 0, y: 0 });
 
@@ -68,7 +72,7 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
     <div className="condec-palette condec-palette-left" style={{
       position: 'absolute',
       left: '10px',
-      top: '20%',
+      top: '25%',
       transform: 'translateY(-50%)',
       background: '#f5f5f5',
       border: '1px solid #e0e0e0',
@@ -152,6 +156,29 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
           }}
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 2048 2048"><rect width="17.563" height="14.478" x="1.23" y="1035.052" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.034" rx="2.759" transform="translate(55.328 -99820.702) scale(96.7529)"/></svg>
+        </div>
+        {/* N-ary Relation Tool */}
+        <div
+          className={`palette-entry ${mode === 'nary' ? 'active' : ''}`}
+          onClick={() => {
+            setMode('nary');
+            setNaryStartNode(null);
+            setNaryMouse(null);
+          }}
+          title="N-ary (Choice) Relation"
+          style={{
+            cursor: 'pointer',
+            padding: '8px',
+            margin: '2px 0',
+            borderRadius: '4px',
+            background: mode === 'nary' ? '#e3f2fd' : 'transparent',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center'
+          }}
+        >
+          {/* Diamond icon */}
+          <svg fill="#000000" viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg" transform="rotate(90)"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"><path d="M 27.9883 52 C 29.2774 52 29.9336 51.1328 31.2461 49.3516 L 45.2383 30.6719 C 45.8711 29.8047 46.2461 28.9375 46.2461 28 C 46.2461 27.0390 45.8711 26.1953 45.2383 25.3281 L 31.2461 6.6250 C 29.9336 4.8672 29.2774 4.0000 27.9883 4.0000 C 26.7227 4.0000 26.0664 4.8672 24.7539 6.6250 L 10.7617 25.3281 C 10.1289 26.1953 9.7539 27.0390 9.7539 28 C 9.7539 28.9375 10.1289 29.8047 10.7617 30.6719 L 24.7539 49.3516 C 26.0664 51.1328 26.7227 52 27.9883 52 Z M 27.9883 47.0547 C 27.8945 47.0547 27.8242 46.9844 27.7774 46.8672 L 14.2070 28.6328 C 13.9961 28.3750 13.9727 28.1875 13.9727 28 C 13.9727 27.8125 13.9961 27.6250 14.2070 27.3672 L 27.7774 9.1094 C 27.8242 9.0156 27.8945 8.9453 27.9883 8.9453 C 28.1055 8.9453 28.1758 9.0156 28.2227 9.1094 L 41.7930 27.3672 C 42.0039 27.6250 42.0274 27.8125 42.0274 28 C 42.0274 28.1875 42.0039 28.3750 41.7930 28.6328 L 28.2227 46.8672 C 28.1758 46.9844 28.1055 47.0547 27.9883 47.0547 Z"></path></g></svg>
         </div>
       </div>
     </div>
@@ -317,7 +344,10 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
       type: elementType,
       element: element
     });
-    setMode('hand'); // Switch back to hand mode on selection
+    // Only switch to hand mode if not in select mode
+    if (mode !== 'select') {
+      setMode('hand');
+    }
   };
 
   // --- Node drag start ---
@@ -509,12 +539,28 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
     };
   }, []);
 
-  // Remove canvas panning handlers
+  // Canvas mouse down handler for selection box
   const handleCanvasMouseDown = (e) => {
     // Only handle selection box
     if (mode === 'select') {
       handleSelectionMouseDown(e);
     }
+  };
+
+  // Selection handlers for multi-select
+  const handleSelectionMouseDown = (e) => {
+    // This is handled by the ConDecCanvas component's lasso functionality
+    // Just pass through to canvas
+  };
+
+  const handleSelectionMouseMove = (e) => {
+    // This is handled by the ConDecCanvas component's lasso functionality
+    // Just pass through to canvas
+  };
+
+  const handleSelectionMouseUp = (e) => {
+    // This is handled by the ConDecCanvas component's lasso functionality
+    // Just pass through to canvas
   };
 
   // --- Zoom Handler ---
@@ -598,93 +644,88 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
 
   // Function to handle canvas clicks
   const handleCanvasClick = (e) => {
-    if (e.target.classList.contains('condec-canvas')) {
-      if (mode === 'addActivity') {
-        handleAddNode(e);
-      } else if (mode !== 'select') {
-        setSelectedElement(null);
-      }
+    // Canvas click handling is now managed by ConDecCanvas component
+    // Just handle addActivity mode here since it needs access to handleAddNode
+    if (e.target.classList.contains('condec-canvas') && mode === 'addActivity') {
+      handleAddNode(e);
     }
   };
 
-  // Handle mouse down for selection box
-  const handleSelectionMouseDown = (e) => {
-    if (mode !== 'select') return;
-
-    const svg = document.querySelector('.condec-canvas');
-    if (!svg || !e.target.classList.contains('condec-canvas')) return;
-
-    const rect = svg.getBoundingClientRect();
-    const x = (e.clientX - rect.left - canvasOffset.x) / zoom;
-    const y = (e.clientY - rect.top - canvasOffset.y) / zoom;
-
-    setSelectionStart({ x, y });
-    setSelectionBox({
-      x: x,
-      y: y,
-      width: 0,
-      height: 0
-    });
-  };
-
-  // Handle mouse move for selection box
-  const handleSelectionMouseMove = (e) => {
-    if (!selectionStart || mode !== 'select') return;
-
-    const svg = document.querySelector('.condec-canvas');
-    if (!svg) return;
-
-    const rect = svg.getBoundingClientRect();
-    const currentX = (e.clientX - rect.left - canvasOffset.x) / zoom;
-    const currentY = (e.clientY - rect.top - canvasOffset.y) / zoom;
-
-    // Calculate the dimensions of the selection box
-    const x = Math.min(selectionStart.x, currentX);
-    const y = Math.min(selectionStart.y, currentY);
-    const width = Math.abs(currentX - selectionStart.x);
-    const height = Math.abs(currentY - selectionStart.y);
-
-    setSelectionBox({ x, y, width, height });
-  };
-
-  // Handle mouse up for selection box
-  const handleSelectionMouseUp = () => {
-    if (!selectionBox || mode !== 'select') {
-      setSelectionStart(null);
-      setSelectionBox(null);
-      return;
-    }
-
-    // Find nodes that are completely within the selection box
-    const selectedNodes = diagram.nodes.filter(node => {
-      // Assuming node width/height is 100x50
-      const nodeLeft = node.x - 50;
-      const nodeRight = node.x + 50;
-      const nodeTop = node.y - 25;
-      const nodeBottom = node.y + 25;
-
-      return (
-        nodeLeft >= selectionBox.x &&
-        nodeRight <= selectionBox.x + selectionBox.width &&
-        nodeTop >= selectionBox.y &&
-        nodeBottom <= selectionBox.y + selectionBox.height
-      );
-    });
-
-    // Update selection if any nodes are selected
-    if (selectedNodes.length > 0) {
-      setSelectedElement({
-        type: 'node',
-        element: selectedNodes[0],
-        multiSelect: selectedNodes.length > 1 ? selectedNodes : null
+  const handleCanvasMouseMove = (e) => {
+    if (mode === 'nary' && naryStartNode) {
+      const svg = document.querySelector('.condec-canvas');
+      if (!svg) return;
+      const rect = svg.getBoundingClientRect();
+      setNaryMouse({
+        x: (e.clientX - rect.left - canvasOffset.x) / zoom,
+        y: (e.clientY - rect.top - canvasOffset.y) / zoom
       });
     }
-
-    // Clear selection box
-    setSelectionStart(null);
-    setSelectionBox(null);
+    // ...existing code...
   };
 
+  // --- N-ary relation creation ---
+  const handleNaryRelationClick = (relation, event) => {
+    if (mode !== 'nary' || !naryStartNode) return;
+    if (!relation.sourceId || !relation.targetId) return;
+    
+    saveToUndoStack();
+    
+    const a = diagram.nodes.find(n => n.id === relation.sourceId);
+    const b = diagram.nodes.find(n => n.id === relation.targetId);
+    if (!a || !b) return;
+    
+    // Find midpoint for diamond placement
+    const mid = relation.waypoints && relation.waypoints.length >= 2
+      ? {
+          x: (relation.waypoints[0].x + relation.waypoints[relation.waypoints.length - 1].x) / 2,
+          y: (relation.waypoints[0].y + relation.waypoints[relation.waypoints.length - 1].y) / 2
+        }
+      : { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    
+    // Create n-ary relation with all three node IDs (ensure no duplicates)
+    const activities = [a.id, b.id, naryStartNode.id];
+    const uniqueActivities = [...new Set(activities)]; // Remove duplicates
+    
+    const newRelation = {
+      id: `nary_${Date.now()}`,
+      type: 'choice',
+      activities: uniqueActivities,
+      n: 1 // Default: choose 1 out of all
+    };
+    
+    // Remove the original binary relation and add the n-ary relation
+    const updatedRelations = [
+      ...diagram.relations.filter(r => r.id !== relation.id),
+      newRelation
+    ];
+    
+    setDiagram({
+      ...diagram,
+      relations: updatedRelations
+    });
+    
+    // Show the n-ary menu for editing
+    setNaryMenu({ relation: newRelation, x: mid.x, y: mid.y });
+    setMode('hand');
+    setNaryStartNode(null);
+    setNaryMouse(null);
+  };
+
+  const handleNaryMenuSave = (updatedRelation) => {
+    saveToUndoStack();
+    
+    const updatedRelations = diagram.relations.map(r =>
+      r.id === updatedRelation.id ? updatedRelation : r
+    );
+    
+    setDiagram({
+      ...diagram,
+      relations: updatedRelations
+    });
+    
+    setNaryMenu(null);
+  };
 
   return (
     <div className="condec-modeler-wrapper" style={wrapperStyle}>
@@ -877,6 +918,11 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
           onAppend={handleAppendActivity}
           setMode={setMode}
           onDeleteMultiSelected={handleDeleteMultiSelected}
+          naryStartNode={naryStartNode}
+          setNaryStartNode={setNaryStartNode}
+          naryMouse={naryMouse}
+          onNaryRelationClick={handleNaryRelationClick}
+          onCanvasMouseMove={handleCanvasMouseMove}
         />
 {/* --- Render floating node menu for selected node --- */}
         {/* --- Render node edit popup if editing a node --- */}
@@ -895,17 +941,41 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
         )}
         {/* Show relation edit sidebar if a relation is selected */}
         {selectedElement && selectedElement.type === 'relation' && (
-          <RelationEditMenu
-            relation={selectedElement.element}
-            nodes={diagram.nodes}
-            setEditNodePopup={setEditNodePopup}
-            setEditNodePopupPos={setEditNodePopupPos}
-            setDiagram={setDiagram}
-            saveToUndoStack={saveToUndoStack}
-            setSelectedElement={setSelectedElement}
-          />
+          <>
+            {selectedElement.element.type === 'choice' ? (
+              <NaryRelationEditMenu
+                relation={selectedElement.element}
+                nodes={diagram.nodes}
+                setDiagram={setDiagram}
+                saveToUndoStack={saveToUndoStack}
+                setSelectedElement={setSelectedElement}
+              />
+            ) : (
+              <RelationEditMenu
+                relation={selectedElement.element}
+                nodes={diagram.nodes}
+                setEditNodePopup={setEditNodePopup}
+                setEditNodePopupPos={setEditNodePopupPos}
+                setDiagram={setDiagram}
+                saveToUndoStack={saveToUndoStack}
+                setSelectedElement={setSelectedElement}
+              />
+            )}
+          </>
         )}
         {renderPalette()}
+        {naryMenu && (
+          <NaryMenu
+            relation={naryMenu.relation}
+            x={naryMenu.x}
+            y={naryMenu.y}
+            zoom={zoom}
+            canvasOffset={canvasOffset}
+            nodes={diagram.nodes}
+            onSave={handleNaryMenuSave}
+            onCancel={() => setNaryMenu(null)}
+          />
+        )}
       </div>
     </div>
   );

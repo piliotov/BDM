@@ -1,10 +1,10 @@
-import React, { useRef, useState, forwardRef, useImperativeHandle } from 'react';
+import React, { useRef, useState, forwardRef, useImperativeHandle, useEffect } from 'react';
 import { ConDecRelation } from './ConDecRelations';
 import { ConDecNode } from './ConDecNode';
 import { ConDecNodeMenu } from './FloatingNodeMenu'; 
 import { calculateIntersectionPoint } from '../utils/geometryUtils';
 import { useCanvasPanning } from '../utils/canvasUtils';
-import { updateRelationsForNode, updateRelationWithFixedEndpoints } from '../utils/relationUtils';
+import { updateRelationsForNode } from '../utils/relationUtils';
 import { RelationMarkers } from '../utils/relationIconUtils';
 import { endConnectMode,getConnectModeState,} from '../utils/connectModeUtils';
 import { getNodesInMultiSelectionBox, getBoundingBoxForMultiSelectedNodes } from '../utils/multiSelectionUtils';
@@ -35,7 +35,13 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
     setPanOrigin,
     multiSelectedNodes = [],
     saveToUndoStack,
+    naryStartNode,
+    naryMouse,
+    onNaryRelationClick,
   } = props;
+
+  // --- Fix: Always call hooks unconditionally at the top level ---
+  // Remove the early return for `if (!diagram) return null;` from here
 
   // Always call useRef
   const svgRef = useRef();
@@ -55,6 +61,9 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
     sourceId: null
   });
   const [relationMouse, setRelationMouse] = useState(null);
+
+  // Add state for diamond dragging
+  const [draggedDiamond, setDraggedDiamond] = useState(null);
 
   // Track latest node sizes by id
   const [nodeSizes, setNodeSizes] = useState({});
@@ -137,11 +146,18 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
       lassoStartedOnCanvas.current = false;
       return;
     }
+    // --- Finalize selection using the last box, not the cleared one ---
+    const finalizedBox = lassoBox;
     setLassoStart(null);
     setLassoBox(null);
     lassoStartedOnCanvas.current = false;
     if (props.setSelectionBox) props.setSelectionBox(null);
-    // Finalize selection (already set live)
+    // Ensure multi-selection is finalized on mouse up, even if mouse hasn't moved
+    if (props.setMultiSelectedNodes && diagram?.nodes && finalizedBox) {
+      const selected = getNodesInMultiSelectionBox(diagram.nodes, finalizedBox);
+      props.setMultiSelectedNodes(selected);
+    }
+    // Do NOT clear multi-selection or selectedElement here!
     e.stopPropagation();
   }
 
@@ -158,9 +174,42 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
       e.stopPropagation();
       return;
     }
+    // In select mode, select node and allow dragging
+    if (mode === 'select') {
+      if (props.onSelectElement) {
+        props.onSelectElement('node', nodeId);
+      }
+      if (diagram && Array.isArray(diagram.nodes)) {
+        const foundNode = diagram.nodes.find(n => n.id === nodeId);
+        setDraggedElement({
+          id: nodeId,
+          startX: e.clientX,
+          startY: e.clientY,
+          elementX: foundNode ? foundNode.x : 0,
+          elementY: foundNode ? foundNode.y : 0
+        });
+      }
+      e.stopPropagation();
+      return;
+    }
+    // In hand mode, allow dragging
+    if (mode === 'hand') {
+      if (diagram && Array.isArray(diagram.nodes)) {
+        const foundNode = diagram.nodes.find(n => n.id === nodeId);
+        setDraggedElement({
+          id: nodeId,
+          startX: e.clientX,
+          startY: e.clientY,
+          elementX: foundNode ? foundNode.x : 0,
+          elementY: foundNode ? foundNode.y : 0
+        });
+      }
+      e.stopPropagation();
+      return;
+    }
     if (mode === 'addRelation') {
       // Only allow setting source if not already active
-      if (!relationCreationState.active) {
+      if (!relationCreationState.active && diagram && Array.isArray(diagram.nodes)) {
         const sourceNode = diagram.nodes.find(n => n.id === nodeId);
         setRelationCreationState({
           active: true,
@@ -169,14 +218,71 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
         });
       }
       // If already active, do nothing (wait for target)
-    } else {
-      setDraggedElement({
-        id: nodeId,
-        startX: e.clientX,
-        startY: e.clientY,
-        elementX: diagram.nodes.find(n => n.id === nodeId).x,
-        elementY: diagram.nodes.find(n => n.id === nodeId).y
+    }
+  };
+
+  // Add diamond drag handlers
+  const handleDiamondMouseDown = (e, relation) => {
+    if (mode !== 'hand') return;
+    e.stopPropagation();
+    
+    const startX = e.clientX;
+    const startY = e.clientY;
+    
+    setDraggedDiamond({
+      relationId: relation.id,
+      startX,
+      startY,
+      originalPos: { ...relation.diamondPos }
+    });
+    
+    // Only call saveToUndoStack if it's available
+    if (saveToUndoStack) {
+      saveToUndoStack();
+    }
+  };
+
+  const handleWaypointDrag = (relationId, waypoints, updatedRelations) => {
+    if (!relationId) return;
+    if (updatedRelations && diagram && Array.isArray(diagram.relations)) {
+      const mergedRelations = diagram.relations.map(rel => {
+        const updatedRel = updatedRelations.find(r => r.id === rel.id);
+        return updatedRel || rel;
       });
+      onRelationEdit && onRelationEdit(mergedRelations);
+      return;
+    }
+    if (diagram && Array.isArray(diagram.relations)) {
+      const relationToUpdate = diagram.relations.find(rel => rel.id === relationId);
+      if (!relationToUpdate) return;
+      const updatedRelation = {
+        ...relationToUpdate,
+        waypoints: waypoints
+      };
+      const updatedRelationsList = diagram.relations.map(rel =>
+        rel.id === relationId ? updatedRelation : rel
+      );
+      onRelationEdit && onRelationEdit(updatedRelationsList);
+    }
+  };
+
+  const handleWaypointDragEnd = (relationId, isLabelDrag = false, prevWaypoints = null) => {
+    if (!relationId) return;
+    if (typeof onRelationEdit === 'function' && diagram && Array.isArray(diagram.relations)) {
+      // Only save to undo stack if waypoints actually changed
+      const relation = diagram.relations.find(r => r.id === relationId);
+      if (relation && prevWaypoints && Array.isArray(relation.waypoints) && Array.isArray(prevWaypoints)) {
+        const changed = relation.waypoints.length !== prevWaypoints.length ||
+          relation.waypoints.some((wp, i) => !prevWaypoints[i] || wp.x !== prevWaypoints[i].x || wp.y !== prevWaypoints[i].y);
+        if (changed && saveToUndoStack) saveToUndoStack();
+      } else if (saveToUndoStack) {
+        // Fallback: always save if no previous waypoints provided
+        saveToUndoStack();
+      }
+      const updatedRelations = diagram.relations.map(r =>
+        r.id === relationId ? relation : r
+      );
+      onRelationEdit(updatedRelations);
     }
   };
 
@@ -219,8 +325,10 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
 
   // Handler for alignment check from relation drag
   const handleAlignmentCheck = (point, relationId = null) => {
-    const guides = getAlignmentGuidesForPoint(point, diagram.nodes, diagram.relations, relationId);
-    setAlignmentGuides(guides);
+    if (diagram && Array.isArray(diagram.nodes) && Array.isArray(diagram.relations)) {
+      const guides = getAlignmentGuidesForPoint(point, diagram.nodes, diagram.relations, relationId);
+      setAlignmentGuides(guides);
+    }
   };
 
   // --- Render alignment guides as SVG lines ---
@@ -354,16 +462,139 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
       if (b.id === selectedNodeId) return -1;
       return 0;
     });
-    
+
+    // --- Pass 1: Render n-ary diamonds and labels only ---
+    const naryDiamondsArr = [];
+    relations.forEach(relation => {
+      if ((relation.type === 'choice' || relation.type === 'Ex_choice') && relation.activities && Array.isArray(relation.activities) && relation.activities.length > 0) {
+        // Ensure diamondPos exists: fallback to centroid if missing
+        let diamondPos = relation.diamondPos;
+        if (!diamondPos) {
+          // Compute centroid of activity nodes
+          const activityNodes = relation.activities.map(id => nodes.find(n => n.id === id)).filter(Boolean);
+          if (activityNodes.length > 0) {
+            const avgX = activityNodes.reduce((sum, n) => sum + n.x, 0) / activityNodes.length;
+            const avgY = activityNodes.reduce((sum, n) => sum + n.y, 0) / activityNodes.length;
+            diamondPos = { x: avgX, y: avgY };
+            if (props.onRelationEdit && diagram && Array.isArray(diagram.relations)) {
+              const updatedRelations = diagram.relations.map(r =>
+                r.id === relation.id ? { ...relation, diamondPos } : r
+              );
+              props.onRelationEdit(updatedRelations);
+            }
+          }
+        }
+        if (!diamondPos) return; // Still no position, skip rendering
+        const isSelected =
+          !multiSelectedNodes.length &&
+          selectedElement &&
+          selectedElement.type === 'relation' &&
+          selectedElement.element.id === relation.id;
+        // Determine fill color
+        let fillColor = '#fff';
+        if (relation.type === 'Ex_choice') fillColor = '#000';
+        naryDiamondsArr.push(
+          <g key={`nary-diamond-${relation.id}`} className="nary-relation-diamond">
+            {/* N-ary connecting lines (behind diamond) */}
+            <g className="nary-relation-lines">
+              {relation.activities.map((nodeId, index) => {
+                const node = nodes.find(n => n.id === nodeId);
+                if (!node) return null;
+                const nodeEdgePoint = calculateIntersectionPoint(
+                  { x: diamondPos.x, y: diamondPos.y },
+                  { x: node.x, y: node.y },
+                  node.width || 100,
+                  node.height || 50
+                );
+                return (
+                  <line
+                    key={`nary-line-${nodeId}-${index}`}
+                    x1={diamondPos.x}
+                    y1={diamondPos.y}
+                    x2={nodeEdgePoint.x}
+                    y2={nodeEdgePoint.y}
+                    stroke={isSelected ? "#1976d2" : "#666"}
+                    strokeWidth={(isSelected ? 2 : 1.5) / zoom}
+                    pointerEvents="none"
+                  />
+                );
+              })}
+            </g>
+            {/* Constraint label above the diamond */}
+            <text
+              x={diamondPos.x}
+              y={diamondPos.y - 20}
+              textAnchor="middle"
+              dominantBaseline="baseline"
+              fontSize={`${12/zoom}px`}
+              fontWeight="bold"
+              fill="#222"
+              pointerEvents="none"
+              style={{ userSelect: 'none' }}
+            >
+              {relation.n} of {relation.activities.length}
+            </text>
+            {/* Diamond shape */}
+            <polygon
+              points={`${diamondPos.x},${diamondPos.y - 8} ${diamondPos.x + 18},${diamondPos.y} ${diamondPos.x},${diamondPos.y + 8} ${diamondPos.x - 18},${diamondPos.y}`}
+              fill={fillColor}
+              stroke={isSelected ? "#1976d2" : "#666"}
+              strokeWidth={(isSelected ? 2 : 1.5) / zoom}
+              onMouseDown={(e) => {
+                if (mode === 'hand' && e.button === 0) {
+                  handleDiamondMouseDown(e, { ...relation, diamondPos });
+                }
+                // In all other cases, do nothing so onClick can fire
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (saveToUndoStack) {
+                  saveToUndoStack();
+                }
+                if (props.onSelectElement) {
+                  props.onSelectElement('relation', relation.id);
+                }
+                if (props.onNaryRelationClick) {
+                  props.onNaryRelationClick(relation, e);
+                }
+              }}
+              style={{ 
+                cursor: mode === 'hand' ? 'move' : (mode === 'nary' && naryStartNode ? 'pointer' : 'default')
+              }}
+            />
+          </g>
+        );
+      }
+    });
+    // --- Pass 2: Render all other relations (binary, etc) ---
     const relationElements = relations.map(relation => {
+      if (relation.type === 'choice' && relation.activities && Array.isArray(relation.activities)) {
+        // n-ary already rendered above
+        return null;
+      }
+      // Regular binary relations
       const sourceNode = nodes.find(n => n.id === relation.sourceId);
       const targetNode = nodes.find(n => n.id === relation.targetId);
       if (!sourceNode || !targetNode) return null;
-      
-      const isSelected = !multiSelectedNodes.length && selectedElement &&
+      const isSelected =
+        !multiSelectedNodes.length &&
+        selectedElement &&
         selectedElement.type === 'relation' &&
         selectedElement.element.id === relation.id;
-      
+      const handleRelationClick =
+        mode === 'nary' && naryStartNode
+          ? (e) => {
+              e.stopPropagation();
+              onNaryRelationClick && onNaryRelationClick(relation, e);
+            }
+          : (e) => {
+              e.stopPropagation();
+              if (mode === 'select' && props.onSelectElement) {
+                props.onSelectElement('relation', relation.id);
+                return;
+              }
+              props.onSelectElement('relation', relation.id);
+            };
       return (
         <ConDecRelation
           key={relation.id}
@@ -371,25 +602,29 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
           sourceNode={sourceNode}
           targetNode={targetNode}
           isSelected={isSelected}
-          onSelect={(e) => {
-            e.stopPropagation();
-            props.onSelectElement('relation', relation.id);
-          }}
+          onSelect={handleRelationClick}
           calculateIntersectionPoint={calculateIntersectionPoint}
           onWaypointDrag={handleWaypointDrag}
           onWaypointDragEnd={handleWaypointDragEnd}
           canvasOffset={canvasOffset}
           zoom={zoom}
           saveToUndoStack={saveToUndoStack}
-          allNodes={nodes} // pass all nodes for n-ary rendering
-          onAlignmentCheck={handleAlignmentCheck} // <-- pass alignment check handler
+          allNodes={nodes}
+          onAlignmentCheck={handleAlignmentCheck}
         />
       );
     });
     
     const handleNodeClick = (nodeId, e) => {
       e.stopPropagation();
-      
+      // --- N-ary creation: start n-ary on node click ---
+      if (mode === 'nary' && !naryStartNode) {
+        const node = nodes.find(n => n.id === nodeId);
+        if (node && props.setNaryStartNode) {
+          props.setNaryStartNode(node);
+        }
+        return;
+      }
       // --- Handle connect-from-node-menu mode ---
       if (connectFromNodeMenu && connectFromNodeMenu.sourceId && nodeId !== connectFromNodeMenu.sourceId) {
         if (props.onRelationCreate) {
@@ -399,18 +634,19 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
         if (props.setMode) props.setMode('hand');
         return;
       }
-      
       // --- Palette relation tool: click source, then click target ---
       if (props.mode === 'addRelation') {
         if (!relationCreationState.active) {
           // First click: set source node
-          const sourceNode = diagram.nodes.find(n => n.id === nodeId);
-          setRelationCreationState({
-            active: true,
-            sourceNode,
-            sourceId: nodeId
-          });
-          setRelationMouse(null);
+          if (diagram && Array.isArray(diagram.nodes)) {
+            const sourceNode = diagram.nodes.find(n => n.id === nodeId);
+            setRelationCreationState({
+              active: true,
+              sourceNode,
+              sourceId: nodeId
+            });
+            setRelationMouse(null);
+          }
           return;
         } else if (
           relationCreationState.active &&
@@ -430,9 +666,15 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
         // If already active and clicking the source again, ignore (do not reset source)
         return;
       }
-      
+      // Select tool: select node
+      if (mode === 'select' && props.onSelectElement) {
+        props.onSelectElement('node', nodeId);
+        return;
+      }
       // Otherwise, normal selection
-      props.onSelectElement('node', nodeId);
+      if (props.onSelectElement) {
+        props.onSelectElement('node', nodeId);
+      }
     };
 
     const nodeElements = nodes.map(node => {
@@ -627,7 +869,22 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
     return (
       <>
         {renderAlignmentGuides()}
+        {naryDiamondsArr}
         {relationElements}
+        {/* N-ary mode: draw dashed arrow from start node to mouse */}
+        {mode === 'nary' && naryStartNode && naryMouse && (
+          <line
+            x1={naryStartNode.x}
+            y1={naryStartNode.y}
+            x2={naryMouse.x}
+            y2={naryMouse.y}
+            stroke="#1976d2"
+            strokeWidth={2}
+            strokeDasharray="6,6"
+            markerEnd="url(#arrow)"
+            pointerEvents="none"
+          />
+        )}
         {temporaryRelation}
         {nodeElements}
         {nodeMenu}
@@ -660,7 +917,7 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
       return;
     }
     // Multi-drag
-    if (multiDragStart) {
+    if (multiDragStart && diagram && Array.isArray(diagram.nodes)) {
       const deltaX = (e.clientX - multiDragStart.startX) / zoom;
       const deltaY = (e.clientY - multiDragStart.startY) / zoom;
       const updatedNodes = diagram.nodes.map(node => {
@@ -674,26 +931,15 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
         onNodeEdit(updatedNodes);
       }
       // Optionally update relations
-      if (typeof onRelationEdit === 'function') {
+      if (typeof onRelationEdit === 'function' && diagram && Array.isArray(diagram.relations)) {
         onRelationEdit(diagram.relations);
       }
       // Update last mouse position for bounding box
       setMultiDragStart(prev => prev ? { ...prev, lastClientX: e.clientX, lastClientY: e.clientY } : prev);
       return;
     }
-    const rect = svgRef.current.getBoundingClientRect();
-    const currentX = e.clientX - rect.left;
-    const currentY = e.clientY - rect.top;
-    setMousePosition && setMousePosition({ x: currentX, y: currentY });
-
-    // Handle panning when in hand mode and mouse button is pressed
-    if (isPanning && mode === 'hand') {
-      handlePanMove(e, isPanning, panStart, panOrigin);
-      return;
-    }
-
     // Handle node dragging
-    if (draggedElement) {
+    if (draggedElement && diagram && Array.isArray(diagram.nodes)) {
       const deltaX = (e.clientX - draggedElement.startX) / zoom;
       const deltaY = (e.clientY - draggedElement.startY) / zoom;
       const updatedNodes = diagram.nodes.map(node => {
@@ -706,32 +952,30 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
         }
         return node;
       });
-
       const draggedNode = updatedNodes.find(node => node.id === draggedElement.id);
       const updatedRelations = updateRelationsForNode(draggedNode, { ...diagram, nodes: updatedNodes });
-
       if (typeof onNodeEdit === 'function') {
         onNodeEdit(updatedNodes);
       }
       if (typeof onRelationEdit === 'function') {
         onRelationEdit(updatedRelations);
       }
-
       const guides = getAlignmentGuides(draggedNode, updatedNodes);
       setAlignmentGuides(guides);
     } else {
       setAlignmentGuides({ x: null, y: null });
-      
+      // Define currentX and currentY for use below
+      const rect = svgRef.current.getBoundingClientRect();
+      const currentX = e.clientX - rect.left;
+      const currentY = e.clientY - rect.top;
       // Update mouse position for temporary relation in any of the relation modes
       if (((mode === 'addRelation' && relationCreationState.active) || 
            mode === 'connectFromNodeMenu') && !draggedElement) {
         setMousePosition({ x: currentX, y: currentY });
       }
-      
       if (mode === 'addRelation' && relationCreationState.active && !draggedElement) {
         setRelationMouse({ x: currentX, y: currentY });
       }
-      
       if (mode === 'select' && selectionBox) {
         onSelectionMouseMove && onSelectionMouseMove(e);
       }
@@ -743,7 +987,7 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
       handleLassoMouseUp(e);
       return;
     }
-    if (multiDragStart) {
+    if (multiDragStart && diagram && Array.isArray(diagram.nodes)) {
       // Only save to undo stack if there was actual movement
       const deltaX = (multiDragStart.lastClientX !== undefined ? multiDragStart.lastClientX : multiDragStart.startX) - multiDragStart.startX;
       const deltaY = (multiDragStart.lastClientY !== undefined ? multiDragStart.lastClientY : multiDragStart.startY) - multiDragStart.startY;
@@ -787,8 +1031,6 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
       }
       setConnectFromNodeMenu(null);
       if (props.setMode) props.setMode('hand');
-    } else if (mode === 'select' && selectionBox) {
-      onSelectionMouseUp && onSelectionMouseUp(e);
     }
     setAlignmentGuides({ x: null, y: null });
   }
@@ -797,56 +1039,67 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
     if (!e.target.classList.contains('condec-canvas')) {
       return;
     }
-    
-    if (relationCreationState.active) {
-      setRelationCreationState({
-        active: false,
-        sourceNode: null,
-        sourceId: null,
-        tempWaypoints: null
-      });
-      setRelationMouse(null);
-      return;
-    }
-    
-    if (relationCreationState.active || connectFromNodeMenu || mode === 'connectFromNodeMenu') {
-      setRelationCreationState({
-        active: false,
-        sourceNode: null,
-        sourceId: null
-      });
-      setRelationMouse(null);
-      setConnectFromNodeMenu(null);
-      if (props.setMode && mode === 'connectFromNodeMenu') {
+
+    // Only clear selection if LMB (button 0)
+    if (e.button === 0) {
+      // Don't switch to hand mode when in select mode - keep selection active
+      if (mode !== 'select' && props.setMode) {
         props.setMode('hand');
       }
-      return;
-    }
-    
-    if (mode === 'select') {
-      if (props.setMode) {
-        props.setMode('hand');
+
+      if (relationCreationState.active) {
+        setRelationCreationState({
+          active: false,
+          sourceNode: null,
+          sourceId: null,
+          tempWaypoints: null
+        });
+        setRelationMouse(null);
+        return;
       }
-      return;
-    }
-    
-    if (mode === 'hand') {
-      // Clear multi-selection if present
+
+      if (connectFromNodeMenu) {
+        setConnectFromNodeMenu(null);
+        return;
+      }
+
+      // Clear n-ary state
+      if (props.setNaryStartNode) {
+        props.setNaryStartNode(null);
+      }
+      if (props.setNaryMouse) {
+        props.setNaryMouse(null);
+      }
+
+      // In select mode, clicking empty canvas clears multi-selection but keeps mode
+      if (mode === 'select') {
+        if (props.setMultiSelectedNodes && multiSelectedNodes && multiSelectedNodes.length > 0) {
+          props.setMultiSelectedNodes([]);
+        }
+        // Clear single selection but keep select mode active
+        if (selectedElement && props.onSelectElement) {
+          props.onSelectElement(null);
+        }
+        return;
+      }
+
+      // Clear multi-selection if present (for other modes)
       if (props.setMultiSelectedNodes && multiSelectedNodes && multiSelectedNodes.length > 0) {
         props.setMultiSelectedNodes([]);
       }
-      // Clear single node selection if present
-      if (selectedElement && selectedElement.type === 'node' && props.onSelectElement) {
+
+      // Clear single node/relation selection if present (for other modes)
+      if (selectedElement && props.onSelectElement) {
         props.onSelectElement(null);
       }
-      return;
+
+      if (getConnectModeState().isActive) {
+        endConnectMode();
+        return;
+      }
     }
-    
-    if (getConnectModeState().isActive) {
-      endConnectMode();
-      return;
-    }
-    
+
+    // Pass through to parent handler for mode-specific logic like addActivity
     if (onCanvasClick) onCanvasClick(e);
   };
 
@@ -864,54 +1117,36 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
     }
   }
 
-  const handleWaypointDrag = (relationId, waypoints, updatedRelations) => {
-    if (!relationId) return;
-    
-    if (updatedRelations) {
-      const mergedRelations = diagram.relations.map(rel => {
-        const updatedRel = updatedRelations.find(r => r.id === rel.id);
-        return updatedRel || rel;
-      });
-      
-      onRelationEdit && onRelationEdit(mergedRelations);
-      return;
-    }
-    
-    const relationToUpdate = diagram.relations.find(rel => rel.id === relationId);
-    if (!relationToUpdate) return;
-    
-    const updatedRelation = updateRelationWithFixedEndpoints(
-      relationToUpdate,
-      waypoints,
-      diagram
-    );
-    
-    const updatedRelationsList = diagram.relations.map(rel => 
-      rel.id === relationId ? updatedRelation : rel
-    );
-    
-    onRelationEdit && onRelationEdit(updatedRelationsList);
-  };
-
-  const handleWaypointDragEnd = (relationId, isLabelDrag = false, prevWaypoints = null) => {
-    if (!relationId) return;
-    if (typeof onRelationEdit === 'function' && diagram.relations) {
-      // Only save to undo stack if waypoints actually changed
-      const relation = diagram.relations.find(r => r.id === relationId);
-      if (relation && prevWaypoints && Array.isArray(relation.waypoints) && Array.isArray(prevWaypoints)) {
-        const changed = relation.waypoints.length !== prevWaypoints.length ||
-          relation.waypoints.some((wp, i) => !prevWaypoints[i] || wp.x !== prevWaypoints[i].x || wp.y !== prevWaypoints[i].y);
-        if (changed && saveToUndoStack) saveToUndoStack();
-      } else if (saveToUndoStack) {
-        // Fallback: always save if no previous waypoints provided
-        saveToUndoStack();
-      }
+  // Handle diamond dragging
+  useEffect(() => {
+    if (!draggedDiamond || !diagram || !Array.isArray(diagram.relations)) return;
+    const handleMouseMove = (e) => {
+      const deltaX = (e.clientX - draggedDiamond.startX) / zoom;
+      const deltaY = (e.clientY - draggedDiamond.startY) / zoom;
+      const newPos = {
+        x: draggedDiamond.originalPos.x + deltaX,
+        y: draggedDiamond.originalPos.y + deltaY
+      };
+      // Update the relation's diamond position
       const updatedRelations = diagram.relations.map(r =>
-        r.id === relationId ? relation : r
+        r.id === draggedDiamond.relationId
+          ? { ...r, diamondPos: newPos }
+          : r
       );
-      onRelationEdit(updatedRelations);
-    }
-  };
+      if (onRelationEdit) {
+        onRelationEdit(updatedRelations);
+      }
+    };
+    const handleMouseUp = () => {
+      setDraggedDiamond(null);
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [draggedDiamond, diagram && diagram.relations, onRelationEdit, zoom, saveToUndoStack]);
 
   // --- Render lasso rectangle ---
   function renderLassoBox() {
@@ -944,6 +1179,27 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
 
   return (
     <div className="condec-canvas-container" style={{ flex: 1, position: 'relative' }}>
+      {(mode === 'nary') && (
+        <div 
+          style={{
+            position: 'absolute',
+            top: '10px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            backgroundColor: 'rgba(25, 118, 210, 0.8)',
+            color: 'white',
+            padding: '8px 12px',
+            borderRadius: '4px',
+            zIndex: 1000,
+            pointerEvents: 'none',
+            fontSize: '14px'
+          }}
+        >
+          {!naryStartNode
+            ? 'Click on a node to start a choice constraint'
+            : 'Click on a relation (diamond) to create the choice constraint'}
+        </div>
+      )}
       {(connectFromNodeMenu || relationCreationState.active) && (
         <div 
           style={{

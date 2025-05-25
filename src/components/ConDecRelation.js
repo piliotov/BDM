@@ -7,7 +7,6 @@ export function ConDecRelation({
   targetNode,
   isSelected,
   onSelect,
-  calculateIntersectionPoint,
   onWaypointDrag,
   onWaypointDragEnd,
   canvasOffset,

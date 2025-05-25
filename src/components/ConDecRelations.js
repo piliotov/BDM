@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { generatePath } from '../utils/geometryUtils';
 import { getRelationVisual } from '../utils/relationUtils';
 import { getRelationMarkerIds } from '../utils/relationIconUtils';
-// Add import for label helper
 import { getRelationLabel } from '../utils/relationUtils';
+import { NaryRelation } from './NaryRelation';
 
 // Export relations types for backward compatibility
 export { RELATION_TYPES } from '../utils/relationUtils';
@@ -20,15 +20,20 @@ export function ConDecRelation({
   onWaypointDragEnd,
   canvasOffset = { x: 0, y: 0 },
   zoom = 1,
-  allNodes: allNodesProp, // <-- add this prop
-  onAlignmentCheck // <-- new prop
+  allNodes: allNodesProp,
+  onAlignmentCheck,
+  mode,
+  naryStartNode,
+  onNaryNodeClick
 }) {
-  // All hooks must be called unconditionally at the top
+  // ALL HOOKS MUST BE AT THE TOP - ALWAYS CALLED UNCONDITIONALLY
   const [draggedWaypointIndex, setDraggedWaypointIndex] = useState(null);
   const [currentWaypoints, setCurrentWaypoints] = useState([]);
   const [isDraggingLabel, setIsDraggingLabel] = useState(false);
   const [labelOffset, setLabelOffset] = useState(relation.labelOffset || { x: 0, y: 0 });
   const dragOffsetRef = React.useRef(null);
+
+  // Calculate derived values
   const relationLabel = getRelationLabel(relation.type);
   const { style, negation, pathStyle } = getRelationVisual(relation.type, isSelected);
   const { startMarkerId, endMarkerId } = getRelationMarkerIds(relation.type);
@@ -37,7 +42,7 @@ export function ConDecRelation({
     pathData = generatePath(currentWaypoints);
   }
 
-  // --- All useEffect hooks must be here, before any return or conditional ---
+  // All useEffect hooks
   useEffect(() => {
     if (!sourceNode || !targetNode) return;
     const waypoints = relation.waypoints || [];
@@ -154,6 +159,25 @@ export function ConDecRelation({
       window.removeEventListener('mouseup', handleLabelDragEnd);
     };
   }, [isDraggingLabel, relation, currentWaypoints, canvasOffset, zoom, onWaypointDrag, onWaypointDragEnd, labelOffset, onAlignmentCheck]);
+
+  // Check for n-ary relation AFTER all hooks
+  if (relation.activities && Array.isArray(relation.activities) && relation.activities.length > 1) {
+    return (
+      <NaryRelation
+        relation={relation}
+        allNodes={allNodesProp}
+        zoom={zoom}
+        canvasOffset={canvasOffset}
+        isSelected={isSelected}
+        onSelect={onSelect}
+      />
+    );
+  }
+
+  // Early return check AFTER all hooks
+  if (!sourceNode || !targetNode || currentWaypoints.length < 2) {
+    return null;
+  }
 
   // Calculate midpoint for label and negation marker
   const midPoint = getPathMidpoint(currentWaypoints);
@@ -431,99 +455,6 @@ export function ConDecRelation({
       </text>
     );
   }
-
-  // --- N-ary relation visualization ---
-  let naryRender = null;
-  // Use allNodes prop if provided, else fallback to global
-  let allNodes = allNodesProp;
-  if (!allNodes || !Array.isArray(allNodes) || allNodes.length === 0) {
-    if (typeof window !== 'undefined' && Array.isArray(window.diagramNodes) && window.diagramNodes.length > 0) {
-      allNodes = window.diagramNodes;
-    }
-  }
-  if (relation.activities && Array.isArray(relation.activities) && relation.activities.length > 1) {
-    const activityNodes = relation.activities.map(act =>
-      allNodes && allNodes.find(n => n.name === act || n.id === `activity_${act}`)
-    ).filter(Boolean);
-    if (activityNodes.length >= 2) {
-      // Compute centroid
-      const centroid = activityNodes.reduce((acc, n) => ({ x: acc.x + n.x, y: acc.y + n.y }), { x: 0, y: 0 });
-      centroid.x /= activityNodes.length;
-      centroid.y /= activityNodes.length;
-      // Rhomboid (diamond) size
-      const diamondW = 36, diamondH = 24;
-      // Label for n-of-m
-      const nLabel = relation.n || 1;
-      const mLabel = relation.m || activityNodes.length;
-      naryRender = (
-        <g className="condec-nary-relation">
-          {activityNodes.map((node, idx) => {
-            // Simple quadratic curve for visual appeal
-            const mx = (node.x + centroid.x) / 2;
-            const my = (node.y + centroid.y) / 2 - 18; // curve up
-            return (
-              <path
-                key={idx}
-                d={`M${node.x},${node.y} Q${mx},${my} ${centroid.x},${centroid.y}`}
-                stroke="#1a73e8"
-                strokeWidth={2}
-                fill="none"
-                markerEnd="url(#arrow)"
-              />
-            );
-          })}
-          {/* Rhomboid (diamond) shape */}
-          <polygon
-            points={`
-              ${centroid.x},${centroid.y - diamondH/2}
-              ${centroid.x + diamondW/2},${centroid.y}
-              ${centroid.x},${centroid.y + diamondH/2}
-              ${centroid.x - diamondW/2},${centroid.y}
-            `}
-            fill="#fff"
-            stroke="#1a73e8"
-            strokeWidth={2}
-          />
-          {/* n-of-m label */}
-          <text
-            x={centroid.x}
-            y={centroid.y + 5}
-            fontSize="13px"
-            textAnchor="middle"
-            fill="#1a73e8"
-            fontWeight="bold"
-          >
-            {nLabel} of {mLabel}
-          </text>
-          {/* Type label below rhomboid */}
-          <text
-            x={centroid.x}
-            y={centroid.y + diamondH/2 + 16}
-            fontSize="12px"
-            textAnchor="middle"
-            fill="#333"
-          >
-            {relation.type === 'ex_choice' ? 'ex_choice' : 'choice'}
-          </text>
-        </g>
-      );
-    } else {
-      // Fallback: show a red X if nodes are missing
-      naryRender = (
-        <g className="condec-nary-relation-error">
-          <text x={0} y={0} fill="red">N-ary relation: activities not found</text>
-        </g>
-      );
-    }
-  }
-
-  // Early return if we don't have the necessary data (for binary/unary)
-  if (!relation.activities && (!sourceNode || !targetNode || currentWaypoints.length < 2)) {
-    return null;
-  }
-
-  // If n-ary, render it and skip the rest
-  if (naryRender) return naryRender;
 
   // --- Main render ---
   return (
