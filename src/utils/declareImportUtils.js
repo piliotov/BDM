@@ -2,6 +2,29 @@ import declareRelationTypeMap from './declareRelationTypeMap';
 import { layoutConnection } from './canvasUtils';
 
 /**
+ * Normalize node positions to start from origin (0,0) with some padding
+ * @param {Array} nodes - Array of nodes with x,y coordinates
+ * @returns {Array} - Nodes with normalized positions
+ */
+function normalizeNodePositions(nodes) {
+  if (nodes.length === 0) return nodes;
+  
+  // Find the minimum x and y coordinates
+  const minX = Math.min(...nodes.map(n => n.x));
+  const minY = Math.min(...nodes.map(n => n.y));
+  
+  // Add some padding from the top-left corner
+  const padding = 50;
+  
+  // Shift all nodes so the leftmost and topmost are at the padding distance from origin
+  return nodes.map(node => ({
+    ...node,
+    x: node.x - minX + padding,
+    y: node.y - minY + padding
+  }));
+}
+
+/**
  * Import Declare TXT
  * @param {string} txt
  * @returns {Object}
@@ -124,6 +147,9 @@ export function importDeclareTxtWithLayout(txt) {
 
   // Auto-place nodes
   nodes = layoutNodesForceDirected(nodes, rels);
+  
+  // Normalize positions to start from origin with padding
+  nodes = normalizeNodePositions(nodes);
 
   // Set waypoints for relations using layoutConnection and actual node size
   rels = rels.map(r => {
@@ -156,7 +182,11 @@ export function importDeclareJsonWithLayout(jsonString) {
   if (!diagram.nodes || !diagram.relations) {
     throw new Error('JSON must be a diagram object with nodes and relations.');
   }
-  // Just return as is (preserve all positions/waypoints)
+  
+  // Normalize node positions to start from origin
+  diagram.nodes = normalizeNodePositions(diagram.nodes);
+  
+  // Just return the normalized diagram
   return diagram;
 }
 
@@ -304,9 +334,12 @@ export function importDeclareXmlWithLayout(xmlString) {
     }
   });
   const placedNodes = layoutNodesForceDirected(Array.from(nodeMap.values()), relations);
+  
+  // Normalize positions to start from origin with padding
+  const normalizedNodes = normalizeNodePositions(placedNodes);
   const rels = relations.map(r => {
-    const source = placedNodes.find(n => n.id === r.sourceId);
-    const target = placedNodes.find(n => n.id === r.targetId);
+    const source = normalizedNodes.find(n => n.id === r.sourceId);
+    const target = normalizedNodes.find(n => n.id === r.targetId);
     const sourceSize = { width: source.width || 100, height: source.height || 50 };
     const targetSize = { width: target.width || 100, height: target.height || 50 };
     return {
@@ -314,5 +347,5 @@ export function importDeclareXmlWithLayout(xmlString) {
       waypoints: layoutConnection(source, target, sourceSize, targetSize)
     };
   });
-  return { nodes: placedNodes, relations: rels };
+  return { nodes: normalizedNodes, relations: rels };
 }

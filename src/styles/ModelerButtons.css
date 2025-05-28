@@ -19,7 +19,7 @@
 }
 .modeler-btn:hover, .modeler-btn:focus {
   background: #f5f5f5;
-  border-color: #1976d2;
+  border-color: #000000;
   outline: none;
 }
 .modeler-btn.import {
@@ -35,33 +35,30 @@
   display: none;
 }
 
-/* Completely redesigned button container */
 .button-container {
   padding: 10px 16px;
   display: flex;
   align-items: center;
-  background-color: #fff; 
+  background-color: transparent;
   border-bottom: 1px solid #e0e0e0;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  box-shadow: none;
 }
 
-/* Make the wrapper content background white to match */
 .modeler-wrapper, .condec-modeler-wrapper {
   background-color: #fff !important;
 }
 
-/* Reset any ConDec specific button container styles */
 .condec-modeler-wrapper .button-container {
   margin: 0;
   padding: 10px 16px;
   background-color: #fff;
 }
 
-/* Reusable button for view mode selector */
 .view-mode-btn {
   padding: 8px 15px;
   font-size: 14px;
   background: #fff;
+  color: #000;
   border: 1px solid #ccc;
   border-radius: 4px;
   cursor: pointer;
@@ -75,19 +72,25 @@
   margin-right: 10px;
 }
 .view-mode-btn.active {
-  background: #e3f0fd;
-  border-color: #1976d2;
+  background: #34a853;
+  color: white;
+  border-color: #000000;
 }
 .view-mode-btn:last-child {
   margin-right: 0;
 }
 .view-mode-btn:hover, .view-mode-btn:focus {
   background: #f5f5f5;
-  border-color: #1976d2;
+  border-color: #000000;
+  color: #000; 
   outline: none;
 }
+.view-mode-btn.active:hover, .view-mode-btn.active:focus {
+  background: #2c8c47;
+  color: white;
+  border-color: #000000;
+}
 
-/* Reusable action button for popups */
 .action-btn {
   flex: 1;
   border: none;
@@ -112,5 +115,101 @@
 }
 .action-btn.neutral:hover, .action-btn.neutral:focus {
   background: #e3f0fd;
-  color: #1976d2;
+  color: #000000;
+}
+
+.back-to-home-btn {
+  padding: 8px 15px;
+  font-size: 14px;
+  background: #1976d2 !important; 
+  color: #fff !important;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  height: 36px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+  margin-right: 0;
+  margin-left: 0;
+  flex-shrink: 0;
+}
+
+.button-container {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.view-mode-buttons {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background-color: transparent;
+  border-bottom: 1px solid #e0e0e0;
+  box-shadow: none;
+}
+
+/* Container for centering the view mode buttons (excluding home) */
+.view-mode-buttons > *:not(.back-to-home-btn) {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Reset margin for home button to keep it left */
+.back-to-home-btn {
+  padding: 8px 15px;
+  font-size: 14px;
+  background: #1976d2 !important; 
+  color: #fff !important;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  height: 36px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+  margin-right: 0;
+  margin-left: 0;
+  flex-shrink: 0; /* Prevent shrinking */
+}
+
+.view-mode-btn {
+  padding: 8px 15px;
+  font-size: 14px;
+  background: #fff;
+  color: #000;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+  height: 36px;
+  min-width: 100px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.view-mode-btn:hover {
+  background: #f5f5f5;
+  border-color: #000000;
+  color: #000;
+}
+
+.view-mode-btn.active {
+  background: #34a853 !important;
+  color: white !important;
+  border-color: #000000; 
+}
+
+.view-mode-btn.active:hover {
+  background: #2c8c47 !important;
+  color: white !important;
+  border-color: #000000; 
 }

@@ -14,10 +14,7 @@ const ViewModeButton = ({ active, onClick, children }) => (
 );
 
 // --- Main Split Modelers Component ---
-/**
- * Renders BPMN and ConDec modelers side by side or individually.
- */
-const SplitModelers = () => {
+const SplitModelers = ({ loadedFile, onBackToLanding }) => {
   const [viewMode, setViewMode] = useState(
     localStorage.getItem(VIEW_MODE_STORAGE_KEY) || VIEW_MODES.SPLIT
   );
@@ -26,15 +23,24 @@ const SplitModelers = () => {
   // Render view mode selector
   const renderViewModeButtons = () => (
     <div className="view-mode-buttons">
-      {Object.entries(VIEW_MODES).map(([key, mode]) => (
-        <ViewModeButton
-          key={mode}
-          active={viewMode === mode}
-          onClick={() => setViewMode(mode)}
-        >
-          {mode.charAt(0).toUpperCase() + mode.slice(1) + (mode === 'split' ? ' View' : ' Only')}
-        </ViewModeButton>
-      ))}
+      <button 
+        className="back-to-home-btn"
+        onClick={onBackToLanding}
+        title="Back to Home"
+      >
+        ← Landing Page
+      </button>
+      <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flex: 1 }}>
+        {Object.entries(VIEW_MODES).map(([key, mode]) => (
+          <ViewModeButton
+            key={mode}
+            active={viewMode === mode}
+            onClick={() => setViewMode(mode)}
+          >
+            {mode.charAt(0).toUpperCase() + mode.slice(1) + (mode === 'split' ? ' View' : ' Only')}
+          </ViewModeButton>
+        ))}
+      </div>
     </div>
   );
 
@@ -65,21 +71,21 @@ const SplitModelers = () => {
         {(viewMode === VIEW_MODES.SPLIT) && (
           <>
             <div className="modeler-half" style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
-              <BpmnModeler />
+              <BpmnModeler loadedFile={loadedFile} />
             </div>
             <div className="modeler-half" style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
-              <ConDecModeler width="100%" height="100%" />
+              <ConDecModeler width="100%" height="100%" loadedFile={loadedFile} />
             </div>
           </>
         )}
         {(viewMode === VIEW_MODES.BPMN) && (
           <div className="modeler-full" style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
-            <BpmnModeler />
+            <BpmnModeler loadedFile={loadedFile} />
           </div>
         )}
         {(viewMode === VIEW_MODES.CONDEC) && (
           <div className="modeler-full" style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
-            <ConDecModeler width="100%" height="100%" />
+            <ConDecModeler width="100%" height="100%" loadedFile={loadedFile} />
           </div>
         )}
       </div>

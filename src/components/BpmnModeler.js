@@ -13,7 +13,7 @@ const ModelerButton = ({ onClick, title, children, ...props }) => (
   <button className="modeler-btn" onClick={onClick} title={title} {...props}>{children}</button>
 );
 
-const BpmnModeler = ({ darkMode = false }) => {
+const BpmnModeler = ({ loadedFile }) => {
   const containerRef = useRef(null);
   const modelerRef = useRef(null);
   const [containerReady, setContainerReady] = useState(false);
@@ -37,8 +37,18 @@ const BpmnModeler = ({ darkMode = false }) => {
     const modeler = new BpmnJS({ container: containerRef.current });
     modelerRef.current = modeler;
 
-    const savedDiagram = localStorage.getItem(LOCAL_STORAGE_KEY) || initialDiagram;
-    modeler.importXML(savedDiagram).then(() => modeler.get('canvas').zoom('fit-viewport'));
+    // Load file if provided, otherwise load from localStorage or default
+    let diagramToLoad = initialDiagram;
+    if (loadedFile && loadedFile.fileType === 'bpmn') {
+      diagramToLoad = loadedFile.content;
+    } else {
+      const savedDiagram = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (savedDiagram) {
+        diagramToLoad = savedDiagram;
+      }
+    }
+
+    modeler.importXML(diagramToLoad).then(() => modeler.get('canvas').zoom('fit-viewport'));
 
     const eventBus = modeler.get('eventBus');
     eventBus.on(['element.changed', 'shape.added', 'shape.removed', 'connection.added', 'connection.removed'], () => {
@@ -46,7 +56,7 @@ const BpmnModeler = ({ darkMode = false }) => {
     });
 
     return () => modeler.destroy();
-  }, [containerReady]);
+  }, [containerReady, loadedFile]);
 
   // --- Keyboard Shortcuts for Undo/Delete ---
   useEffect(() => {
@@ -107,7 +117,7 @@ const BpmnModeler = ({ darkMode = false }) => {
   });
 
   return (
-    <div className={`modeler-wrapper ${darkMode ? 'dark-mode' : ''}`} style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <div className="modeler-wrapper" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div className="button-container">
         <ModelerButton onClick={handleNew} title="New BPMN Diagram">New</ModelerButton>
         <ModelerButton onClick={handleSave} title="Export BPMN XML">Export</ModelerButton>

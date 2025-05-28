@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import  { useEffect, useState, useCallback, useRef } from 'react';
 import '../styles/ConDecModeler.css';
 import '../styles/ModelerButtons.css';
 import { ConDecCanvas } from './ConDecCanvas';
@@ -12,12 +12,10 @@ import { NodeEditMenu } from './NodeEditMenu';
 import { importDeclareTxtWithLayout, importDeclareXmlWithLayout, importDeclareJsonWithLayout } from '../utils/declareImportUtils';
 import { NaryRelationEditMenu } from './NaryRelationEditMenu';
 
-// Constants for local storage
 const LOCAL_STORAGE_KEY = 'condec-diagram';
 
-const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
+const ConDecModeler = ({ width = '100%', height = '100%', style = {}, loadedFile }) => {
 
-  // State
   const [diagram, setDiagram] = useState(null);
   const [selectedElement, setSelectedElement] = useState(null);
   const [draggedElement, setDraggedElement] = useState(null);
@@ -41,8 +39,9 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
   const [naryMouse, setNaryMouse] = useState(null);
   const [hologramNodePosition, setHologramNodePosition] = useState(null);
 
-  // Calculate the center offset based on window size
+  // Canvas offset for panning - initialize with consistent origin
   const [canvasOffset, setCanvasOffset] = useState({ x: 0, y: 0 });
+  const [isCanvasInitialized, setIsCanvasInitialized] = useState(false);
 
   // Ref for canvas SVG to compute node screen position
   const canvasRef = useRef(null);
@@ -68,23 +67,29 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
   }, [diagram]);
 
   // Render palette (icon-only, vertical, left side)
+  // Render palette (icon-only, vertical, left side, stationary below action bar)
   const renderPalette = () => (
-    <div className="condec-palette condec-palette-left" style={{
-      position: 'absolute',
-      left: '10px',
-      top: '22%',
-      transform: 'translateY(-50%)',
-      background: '#f5f5f5',
-      border: '1px solid #e0e0e0',
-      borderRadius: '4px',
-      boxShadow: '0 1px 4px rgba(0,0,0,0.1)',
-      zIndex: 10
-    }}>
-      <div className="palette-group" style={{
-        display: 'flex',
-        flexDirection: 'column',
-        padding: '6px'
-      }}>
+    <div
+      className="condec-palette condec-palette-left"
+      style={{
+        position: 'absolute',
+        left: '10px',
+        top: '15px',
+        background: '#f5f5f5',
+        border: '1px solid #e0e0e0',
+        borderRadius: '4px',
+        boxShadow: '0 1px 4px rgba(0,0,0,0.1)',
+        zIndex: 10
+      }}
+    >
+      <div
+        className="palette-group"
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          padding: '6px'
+        }}
+      >
         {/* Hand Tool */}
         <div
           className={`palette-entry ${mode === 'hand' ? 'active' : ''}`}
@@ -184,26 +189,62 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
     </div>
   );
 
-  // Update canvas size and center offset when window resizes
+  // Center the canvas view with origin closer to top-left
+  const centerView = useCallback(() => {
+    const container = document.querySelector('.condec-canvas-container');
+    if (container) {
+      const { width, height } = container.getBoundingClientRect();
+      // Position the origin (0,0) closer to top-left corner
+      // This makes new activities appear in a more natural position
+      setCanvasOffset({ 
+        x: width * 0.2,  // 20% from left edge
+        y: height * 0.15 // 15% from top edge
+      });
+    }
+  }, []);
+
+  // Update canvas size on window resize but preserve offset unless it's the first initialization
   useEffect(() => {
     const updateCanvasSize = () => {
       const container = document.querySelector('.condec-canvas-container');
-      if (container) {
-        const { width, height } = container.getBoundingClientRect();
-        setCanvasOffset({ 
-          x: width / 2, 
-          y: height / 2 
-        });
+      if (container && !isCanvasInitialized) {
+        // Only center the canvas on the very first initialization
+        centerView();
+        setIsCanvasInitialized(true);
       }
     };
 
     updateCanvasSize();
     window.addEventListener('resize', updateCanvasSize);
     return () => window.removeEventListener('resize', updateCanvasSize);
-  }, []);
+  }, [isCanvasInitialized, centerView]); // Added centerView to dependencies
 
-  // Load diagram from localStorage or use initial diagram
+  // Load diagram from localStorage, loadedFile, or use initial diagram
   useEffect(() => {
+    // Handle loaded file from landing page first
+    if (loadedFile && loadedFile.fileType.startsWith('condec-')) {
+      try {
+        let diagram;
+        if (loadedFile.fileType === 'condec-xml') {
+          diagram = importDeclareXmlWithLayout(loadedFile.content);
+        } else if (loadedFile.fileType === 'condec-txt') {
+          diagram = importDeclareTxtWithLayout(loadedFile.content);
+        } else if (loadedFile.fileType === 'condec-json') {
+          diagram = importDeclareJsonWithLayout(loadedFile.content);
+        }
+        if (diagram) {
+          setDiagram(diagram);
+          // Center the view when a new diagram is loaded
+          setTimeout(() => centerView(), 100);
+          return;
+        }
+      } catch (e) {
+        console.error('Error loading file:', e);
+        alert(`Error loading file: ${e.message}`);
+      }
+    }
+
+    // Fall back to localStorage or initial diagram
     const savedDiagram = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (savedDiagram) {
       try {
@@ -215,7 +256,7 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
     } else {
       setDiagram(initialDiagram);
     }
-  }, []);
+  }, [loadedFile, centerView]);
 
   // Save diagram to localStorage when it changes
   useEffect(() => {
@@ -644,8 +685,6 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
 
   // Function to handle canvas clicks
   const handleCanvasClick = (e) => {
-    // Canvas click handling is now managed by ConDecCanvas component
-    // Just handle addActivity mode here since it needs access to handleAddNode
     if (e.target.classList.contains('condec-canvas') && mode === 'addActivity') {
       handleAddNode(e);
     }
@@ -672,7 +711,6 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
         y: (e.clientY - rect.top - canvasOffset.y) / zoom
       });
     }
-    // ...existing code...
   };
 
   // --- N-ary relation creation ---
@@ -686,7 +724,7 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
     const b = diagram.nodes.find(n => n.id === relation.targetId);
     if (!a || !b) return;
     
-    // Find midpoint for diamond placement
+    // eslint-disable-next-line no-unused-vars
     const mid = relation.waypoints && relation.waypoints.length >= 2
       ? {
           x: (relation.waypoints[0].x + relation.waypoints[relation.waypoints.length - 1].x) / 2,
@@ -747,105 +785,112 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
           Export SVG
         </button>
         <button
+          className="modeler-btn"
+          onClick={centerView}
+          title="Reset View to Top-Left"
+        >
+          Center Canvas
+        </button>
+        <button
           className="modeler-btn import"
-          style={{ minWidth: 100 }}
+          style={{  }}
           onClick={e => {
             e.stopPropagation(); // Prevent canvas click from firing
             setShowImportDropdown(v => !v);
-          }}
-          title="Import diagram"
-          type="button"
-          ref={importBtnRef}
-        >
-          Import ▼
-        </button>
-        {showImportDropdown && (
-          <div style={{
+            }}
+            title="Import diagram"
+            type="button"
+            ref={importBtnRef}
+          >
+            Import
+          </button>
+          {showImportDropdown && importBtnRef.current && (
+            <div style={{
             position: 'absolute',
-            top: 50,
-            left: 335,
+            top: importBtnRef.current.offsetTop + importBtnRef.current.offsetHeight,
+            left: importBtnRef.current.offsetLeft,
             background: '#388e3c',
-            border: '1px solid #2e7031',
+            border: '1px solid rgb(73, 138, 78)',
             borderRadius: 4,
             boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
             zIndex: 1000,
             minWidth: 180,
             color: '#fff',
             padding: 0
-          }}>
+            }}>
             <label style={{ display: 'block', padding: '8px 16px', cursor: 'pointer', color: '#fff' }}>
               Import XML
               <input type="file" accept=".xml" style={{ display: 'none' }} onChange={async (event) => {
-                const file = event.target.files[0];
-                if (!file) return;
-                if (!window.confirm('Importing will overwrite your current model. Continue?')) {
-                  event.target.value = null;
-                  setShowImportDropdown(false);
-                  return;
-                }
-                const text = await file.text();
-                try {
-                  const diagram = importDeclareXmlWithLayout(text);
-                  saveToUndoStack();
-                  setDiagram(diagram);
-                  setSelectedElement(null);
-                } catch (e) {
-                  alert('Invalid XML file.');
-                }
-                setShowImportDropdown(false);
+              const file = event.target.files[0];
+              if (!file) return;
+              if (!window.confirm('Importing will overwrite your current model. Continue?')) {
                 event.target.value = null;
+                setShowImportDropdown(false);
+                return;
+              }
+              const text = await file.text();
+              try {
+                const diagram = importDeclareXmlWithLayout(text);
+                saveToUndoStack();
+                setDiagram(diagram);
+                setSelectedElement(null);
+              } catch (e) {
+                alert('Invalid XML file.');
+              }
+              setShowImportDropdown(false);
+              event.target.value = null;
               }} />
             </label>
             <label style={{ display: 'block', padding: '8px 16px', cursor: 'pointer', color: '#fff' }}>
               Import TXT
               <input type="file" accept=".txt" style={{ display: 'none' }} onChange={async (event) => {
-                const file = event.target.files[0];
-                if (!file) return;
-                if (!window.confirm('Importing will overwrite your current model. Continue?')) {
-                  event.target.value = null;
-                  setShowImportDropdown(false);
-                  return;
-                }
-                const text = await file.text();
-                try {
-                  const diagram = importDeclareTxtWithLayout(text);
-                  saveToUndoStack();
-                  setDiagram(diagram);
-                  setSelectedElement(null);
-                } catch (e) {
-                  alert(e && e.stack ? e.stack : (e && e.message ? e.message : String(e)));
-                }
-                setShowImportDropdown(false);
+              const file = event.target.files[0];
+              if (!file) return;
+              if (!window.confirm('Importing will overwrite your current model. Continue?')) {
                 event.target.value = null;
+                setShowImportDropdown(false);
+                return;
+              }
+              const text = await file.text();
+              try {
+                const diagram = importDeclareTxtWithLayout(text);
+                saveToUndoStack();
+                setDiagram(diagram);
+                setSelectedElement(null);
+              } catch (e) {
+                alert(e && e.stack ? e.stack : (e && e.message ? e.message : String(e)));
+              }
+              setShowImportDropdown(false);
+              event.target.value = null;
               }} />
             </label>
             <label style={{ display: 'block', padding: '8px 16px', cursor: 'pointer', color: '#fff' }}>
               Import JSON
               <input type="file" accept=".json" style={{ display: 'none' }} onChange={async (event) => {
-                const file = event.target.files[0];
-                if (!file) return;
-                if (!window.confirm('Importing will overwrite your current model. Continue?')) {
-                  event.target.value = null;
-                  setShowImportDropdown(false);
-                  return;
-                }
-                const text = await file.text();
-                try {
-                  const diagram = importDeclareJsonWithLayout(text);
-                  saveToUndoStack();
-                  setDiagram(diagram);
-                  setSelectedElement(null);
-                } catch (e) {
-                  alert('Invalid JSON file.');
-                }
-                setShowImportDropdown(false);
+              const file = event.target.files[0];
+              if (!file) return;
+              if (!window.confirm('Importing will overwrite your current model. Continue?')) {
                 event.target.value = null;
+                setShowImportDropdown(false);
+                return;
+              }
+              const text = await file.text();
+              try {
+                const diagram = importDeclareJsonWithLayout(text);
+                saveToUndoStack();
+                setDiagram(diagram);
+                setSelectedElement(null);
+              } catch (e) {
+                alert('Invalid JSON file.');
+              }
+              setShowImportDropdown(false);
+              event.target.value = null;
               }} />
             </label>
+            </div>
+          )}
           </div>
-        )}
-      </div>
-      {/* --- Main modeler area --- */}
+          {/* --- Main modeler area --- */}
       <div className="condec-modeler-container" style={{
         display: 'flex',
         flexDirection: 'row',
