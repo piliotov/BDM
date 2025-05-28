@@ -13,7 +13,7 @@ const ModelerButton = ({ onClick, title, children, ...props }) => (
   <button className="modeler-btn" onClick={onClick} title={title} {...props}>{children}</button>
 );
 
-const BpmnModeler = () => {
+const BpmnModeler = ({ darkMode = false }) => {
   const containerRef = useRef(null);
   const modelerRef = useRef(null);
   const [containerReady, setContainerReady] = useState(false);
@@ -107,7 +107,7 @@ const BpmnModeler = () => {
   });
 
   return (
-    <div className="modeler-wrapper" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <div className={`modeler-wrapper ${darkMode ? 'dark-mode' : ''}`} style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div className="button-container">
         <ModelerButton onClick={handleNew} title="New BPMN Diagram">New</ModelerButton>
         <ModelerButton onClick={handleSave} title="Export BPMN XML">Export</ModelerButton>
