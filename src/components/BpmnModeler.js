@@ -107,7 +107,7 @@ const BpmnModeler = () => {
   });
 
   return (
-    <div className="modeler-wrapper">
+    <div className="modeler-wrapper" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div className="button-container">
         <ModelerButton onClick={handleNew} title="New BPMN Diagram">New</ModelerButton>
         <ModelerButton onClick={handleSave} title="Export BPMN XML">Export</ModelerButton>
@@ -117,7 +117,7 @@ const BpmnModeler = () => {
           <input type="file" accept=".bpmn,.xml" onChange={handleImport} />
         </label>
       </div>
-      <div className="modeler-container" style={{ width: '100%', height: '80vh', minHeight: 300 }}>
+      <div className="modeler-container" style={{ width: '100%', flex: 1, minHeight: 0, paddingBottom: '30px' }}>
         <div ref={containerRef} style={{ width: '100%', height: '100%' }}></div>
       </div>
     </div>

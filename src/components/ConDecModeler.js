@@ -10,7 +10,6 @@ import { appendActivityAndConnect } from '../utils/append-action';
 import RelationEditMenu from './RelationEditMenu';
 import { NodeEditMenu } from './NodeEditMenu';
 import { importDeclareTxtWithLayout, importDeclareXmlWithLayout, importDeclareJsonWithLayout } from '../utils/declareImportUtils';
-import { NaryMenu } from './NaryRelation';
 import { NaryRelationEditMenu } from './NaryRelationEditMenu';
 
 // Constants for local storage
@@ -37,9 +36,10 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
   const [panOrigin, setPanOrigin] = useState({ x: 0, y: 0 });
   const [showImportDropdown, setShowImportDropdown] = useState(false);
   const [multiSelectedNodes, setMultiSelectedNodes] = useState([]);
+  const [multiSelectedElements, setMultiSelectedElements] = useState({ nodes: [], relationPoints: [], naryDiamonds: [] });
   const [naryStartNode, setNaryStartNode] = useState(null);
   const [naryMouse, setNaryMouse] = useState(null);
-  const [naryMenu, setNaryMenu] = useState(null);
+  const [hologramNodePosition, setHologramNodePosition] = useState(null);
 
   // Calculate the center offset based on window size
   const [canvasOffset, setCanvasOffset] = useState({ x: 0, y: 0 });
@@ -72,7 +72,7 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
     <div className="condec-palette condec-palette-left" style={{
       position: 'absolute',
       left: '10px',
-      top: '25%',
+      top: '22%',
       transform: 'translateY(-50%)',
       background: '#f5f5f5',
       border: '1px solid #e0e0e0',
@@ -661,6 +661,17 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
         y: (e.clientY - rect.top - canvasOffset.y) / zoom
       });
     }
+    
+    // Track mouse position for hologram node in addActivity mode
+    if (mode === 'addActivity') {
+      const svg = document.querySelector('.condec-canvas');
+      if (!svg) return;
+      const rect = svg.getBoundingClientRect();
+      setHologramNodePosition({
+        x: (e.clientX - rect.left - canvasOffset.x) / zoom,
+        y: (e.clientY - rect.top - canvasOffset.y) / zoom
+      });
+    }
     // ...existing code...
   };
 
@@ -705,26 +716,10 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
       relations: updatedRelations
     });
     
-    // Show the n-ary menu for editing
-    setNaryMenu({ relation: newRelation, x: mid.x, y: mid.y });
+    // Finish n-ary relation creation with directly created relation
     setMode('hand');
     setNaryStartNode(null);
     setNaryMouse(null);
-  };
-
-  const handleNaryMenuSave = (updatedRelation) => {
-    saveToUndoStack();
-    
-    const updatedRelations = diagram.relations.map(r =>
-      r.id === updatedRelation.id ? updatedRelation : r
-    );
-    
-    setDiagram({
-      ...diagram,
-      relations: updatedRelations
-    });
-    
-    setNaryMenu(null);
   };
 
   return (
@@ -901,6 +896,8 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
           setSelectionBox={setSelectionBox}
           multiSelectedNodes={multiSelectedNodes}
           setMultiSelectedNodes={setMultiSelectedNodes}
+          multiSelectedElements={multiSelectedElements}
+          setMultiSelectedElements={setMultiSelectedElements}
           onNodeMenuEdit={node => {
             setEditNodePopup({ node: { ...node } });
             setEditNodePopupPos({ x: null, y: null });
@@ -923,6 +920,7 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
           naryMouse={naryMouse}
           onNaryRelationClick={handleNaryRelationClick}
           onCanvasMouseMove={handleCanvasMouseMove}
+          hologramNodePosition={hologramNodePosition}
         />
 {/* --- Render floating node menu for selected node --- */}
         {/* --- Render node edit popup if editing a node --- */}
@@ -964,18 +962,6 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {} }) => {
           </>
         )}
         {renderPalette()}
-        {naryMenu && (
-          <NaryMenu
-            relation={naryMenu.relation}
-            x={naryMenu.x}
-            y={naryMenu.y}
-            zoom={zoom}
-            canvasOffset={canvasOffset}
-            nodes={diagram.nodes}
-            onSave={handleNaryMenuSave}
-            onCancel={() => setNaryMenu(null)}
-          />
-        )}
       </div>
     </div>
   );

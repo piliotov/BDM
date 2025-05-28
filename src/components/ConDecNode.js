@@ -72,11 +72,10 @@ export function ConDecNode({
     if (node.editing) setEditing(true);
   }, [node.name, node.editing]);
 
-  // --- Prevent node deletion with Backspace when editing name (macOS fix) ---
+  // --- Prevent node deletion with Backspace when editing name ---
   useEffect(() => {
     if (!editing) return;
     const handleKeyDown = (e) => {
-      // Only block Backspace/Delete if editing
       if ((e.key === 'Backspace' || e.key === 'Delete') && document.activeElement === inputRef.current) {
         e.stopPropagation();
       }
@@ -89,10 +88,8 @@ export function ConDecNode({
   const finishEditing = () => {
     setEditing(false);
     if (editValue.trim() && editValue !== node.name) {
-      // Pass a second argument to signal editing should be cleared
       onRename(editValue.trim(), true);
     } else if (node.editing) {
-      // If editing flag is set but name didn't change, still clear editing
       onRename(node.name, true);
     }
     if (onRenameBlur) onRenameBlur();
@@ -172,7 +169,7 @@ export function ConDecNode({
         height={height}
         rx="5"
         ry="5"
-        fill={constraintViolated ? "#ffebee" : "#f5f5f5"}
+        fill={constraintViolated ? "#ffebee" : "#ffffff"}
         stroke={constraintViolated ? '#d32f2f' : (isSelected ? '#1a73e8' : '#000')}
         strokeWidth={constraintViolated ? 2.5 : (isSelected ? 2.5 : 1.5)}
         fillOpacity={0.95}

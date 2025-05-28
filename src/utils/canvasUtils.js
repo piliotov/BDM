@@ -2,6 +2,8 @@
  * Canvas utilities for handling operations like panning and zooming
  */
 
+import { useRef } from 'react';
+
 /**
  * Initialize canvas panning functionality
  * @param {Object} params Configuration parameters
@@ -22,28 +24,45 @@ export const useCanvasPanning = ({
   zoom 
 }) => {
   
+  // Use refs to store current panning state
+  const panStateRef = useRef({
+    isPanning: false,
+    panStart: { x: 0, y: 0 },
+    panOrigin: { x: 0, y: 0 }
+  });
+  
   // Start panning
   const handlePanStart = (e) => {
+    const startPos = { x: e.clientX, y: e.clientY };
+    const originPos = { x: canvasOffset.x, y: canvasOffset.y };
+    
+    panStateRef.current = {
+      isPanning: true,
+      panStart: startPos,
+      panOrigin: originPos
+    };
+    
     setIsPanning(true);
-    setPanStart({ x: e.clientX, y: e.clientY });
-    setPanOrigin({ x: canvasOffset.x, y: canvasOffset.y });
+    setPanStart(startPos);
+    setPanOrigin(originPos);
   };
 
   // Continue panning
-  const handlePanMove = (e, isPanning, panStart, panOrigin) => {
-    if (!isPanning) return;
+  const handlePanMove = (e) => {
+    if (!panStateRef.current.isPanning) return;
     
-    const dx = e.clientX - panStart.x;
-    const dy = e.clientY - panStart.y;
+    const dx = e.clientX - panStateRef.current.panStart.x;
+    const dy = e.clientY - panStateRef.current.panStart.y;
     
     setCanvasOffset({
-      x: panOrigin.x + dx,
-      y: panOrigin.y + dy
+      x: panStateRef.current.panOrigin.x + dx,
+      y: panStateRef.current.panOrigin.y + dy
     });
   };
 
   // End panning
   const handlePanEnd = () => {
+    panStateRef.current.isPanning = false;
     setIsPanning(false);
   };
 

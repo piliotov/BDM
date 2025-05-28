@@ -1,20 +1,17 @@
-// src/utils/declareRelationTypeMap.js
-// Map Declare XML/TXT constraint names to internal relation type keys
-// (for use in importDeclareTxtWithLayout and importDeclareXmlWithLayout)
+// This module maps various Declare relation types to their standardized names for Importing TXT and XML files.
 
 const declareRelationTypeMap = {
-  // Standard Declare names (case-insensitive)
-  response: 'response',
-  precedence: 'precedence',
-  succession: 'succession',
-  coexistence: 'coexistence',
-  exclusion: 'exclusion',
+  'response': 'response',
+  'precedence': 'precedence',
+  'succession': 'succession',
+  'coexistence': 'coexistence',
+  'exclusion': 'exclusion',
   'not-coexistence': 'not_coexistence',
   'not_coexistence': 'not_coexistence',
   'not coexistence': 'not_coexistence',
   'not co-existence': 'not_coexistence',
   'not co_existence': 'not_coexistence',
-  notcoexistence: 'not_coexistence',
+  'notcoexistence': 'not_coexistence',
   'resp_existence': 'resp_existence',
   'resp-existence': 'resp_existence',
   'resp existence': 'resp_existence',

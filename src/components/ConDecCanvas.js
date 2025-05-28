@@ -7,7 +7,8 @@ import { useCanvasPanning } from '../utils/canvasUtils';
 import { updateRelationsForNode } from '../utils/relationUtils';
 import { RelationMarkers } from '../utils/relationIconUtils';
 import { endConnectMode,getConnectModeState,} from '../utils/connectModeUtils';
-import { getNodesInMultiSelectionBox, getBoundingBoxForMultiSelectedNodes } from '../utils/multiSelectionUtils';
+import { getBoundingBoxForMultiSelectedNodes, getAllSelectableElementsInBox, getBoundingBoxForMixedSelection } from '../utils/multiSelectionUtils';
+
 
 export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
   const {
@@ -31,14 +32,14 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
     setPanStart,
     setPanOrigin,
     multiSelectedNodes = [],
+    multiSelectedElements = { nodes: [], relationPoints: [], naryDiamonds: [] },
     saveToUndoStack,
     naryStartNode,
     naryMouse,
     onNaryRelationClick,
   } = props;
 
-  // --- Fix: Always call hooks unconditionally at the top level ---
-  // Remove the early return for `if (!diagram) return null;` from here
+
 
   // Always call useRef
   const svgRef = useRef();
@@ -78,7 +79,7 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
   };
 
   // Set up canvas panning functionality
-  const { handlePanStart, /*handlePanMove,*/ handlePanEnd } = useCanvasPanning({
+  const { handlePanStart, handlePanMove, handlePanEnd } = useCanvasPanning({
     setCanvasOffset,
     setIsPanning,
     setPanStart,
@@ -128,10 +129,15 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
     };
     setLassoBox(box);
     if (props.setSelectionBox) props.setSelectionBox(box);
-    // Update multi-selected nodes live
-    if (props.setMultiSelectedNodes && diagram?.nodes) {
-      const selected = getNodesInMultiSelectionBox(diagram.nodes, box);
-      props.setMultiSelectedNodes(selected);
+    // Update multi-selected elements live (nodes, relation points, nary diamonds)
+    if (props.setMultiSelectedNodes && diagram?.nodes && diagram?.relations) {
+      const selectedElements = getAllSelectableElementsInBox(diagram.nodes, diagram.relations, box);
+      // For backward compatibility, still use setMultiSelectedNodes but pass a combined object
+      props.setMultiSelectedNodes(selectedElements.nodes);
+      // Store additional selections if the parent component supports it
+      if (props.setMultiSelectedElements) {
+        props.setMultiSelectedElements(selectedElements);
+      }
     }
     e.stopPropagation();
   }
@@ -150,19 +156,56 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
     lassoStartedOnCanvas.current = false;
     if (props.setSelectionBox) props.setSelectionBox(null);
     // Ensure multi-selection is finalized on mouse up, even if mouse hasn't moved
-    if (props.setMultiSelectedNodes && diagram?.nodes && finalizedBox) {
-      const selected = getNodesInMultiSelectionBox(diagram.nodes, finalizedBox);
-      props.setMultiSelectedNodes(selected);
+    if (props.setMultiSelectedNodes && diagram?.nodes && diagram?.relations && finalizedBox) {
+      const selectedElements = getAllSelectableElementsInBox(diagram.nodes, diagram.relations, finalizedBox);
+      props.setMultiSelectedNodes(selectedElements.nodes);
+      if (props.setMultiSelectedElements) {
+        props.setMultiSelectedElements(selectedElements);
+      }
     }
-    // Do NOT clear multi-selection or selectedElement here!
-    // e.stopPropagation(); // (optional, can be left out)
   }
 
   // --- Node drag/relation logic ---
   const handleNodeInteractionStart = (nodeId, e) => {
-    // If multi-select is active and node is in selection, start group drag
-    if (multiSelectedNodes && multiSelectedNodes.length > 1 && multiSelectedNodes.find(n => n.id === nodeId)) {
+    // Check if we have an extended multi-selection (includes relation points or nary diamonds)
+    const hasExtendedSelection = multiSelectedElements && 
+      (multiSelectedElements.relationPoints?.length > 0 || multiSelectedElements.naryDiamonds?.length > 0);
+    
+    // If extended multi-select is active and node is in selection, start group drag
+    if (hasExtendedSelection) {
+      const totalElements = (multiSelectedElements.nodes?.length || 0) + 
+                           (multiSelectedElements.relationPoints?.length || 0) + 
+                           (multiSelectedElements.naryDiamonds?.length || 0);
+      const nodeInSelection = multiSelectedElements.nodes?.find(n => n.id === nodeId);
+      
+      if (totalElements > 1 && nodeInSelection) {
+        setMultiDragStart({
+          type: 'extended',
+          startX: e.clientX,
+          startY: e.clientY,
+          selectedElements: {
+            nodes: multiSelectedElements.nodes?.map(n => ({ id: n.id, x: n.x, y: n.y })) || [],
+            relationPoints: multiSelectedElements.relationPoints?.map(rp => ({ 
+              relationId: rp.relationId, 
+              waypointIndex: rp.waypointIndex, 
+              x: rp.x, 
+              y: rp.y 
+            })) || [],
+            naryDiamonds: multiSelectedElements.naryDiamonds?.map(nd => ({ 
+              relationId: nd.relationId, 
+              x: nd.x, 
+              y: nd.y 
+            })) || []
+          }
+        });
+        e.stopPropagation();
+        return;
+      }
+    }
+    // If traditional multi-select is active and node is in selection, start group drag
+    else if (multiSelectedNodes && multiSelectedNodes.length > 1 && multiSelectedNodes.find(n => n.id === nodeId)) {
       setMultiDragStart({
+        type: 'nodes',
         nodeIds: multiSelectedNodes.map(n => n.id),
         startX: e.clientX,
         startY: e.clientY,
@@ -218,10 +261,49 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
     }
   };
 
-  // Add diamond drag handlers
-  const handleDiamondMouseDown = (e, relation) => {
+  const handleNaryDiamondInteractionStart = (relationId, x, y, e) => {
+    // Check if we have an extended multi-selection that includes this nary diamond
+    const hasExtendedSelection = multiSelectedElements && 
+      (multiSelectedElements.relationPoints?.length > 0 || multiSelectedElements.naryDiamonds?.length > 0);
+    
+    if (hasExtendedSelection) {
+      const totalElements = (multiSelectedElements.nodes?.length || 0) + 
+                           (multiSelectedElements.relationPoints?.length || 0) + 
+                           (multiSelectedElements.naryDiamonds?.length || 0);
+      const diamondInSelection = multiSelectedElements.naryDiamonds?.find(nd => 
+        nd.relationId === relationId);
+      
+      if (totalElements > 1 && diamondInSelection) {
+        setMultiDragStart({
+          type: 'extended',
+          startX: e.clientX,
+          startY: e.clientY,
+          selectedElements: {
+            nodes: multiSelectedElements.nodes?.map(n => ({ id: n.id, x: n.x, y: n.y })) || [],
+            relationPoints: multiSelectedElements.relationPoints?.map(rp => ({ 
+              relationId: rp.relationId, 
+              waypointIndex: rp.waypointIndex, 
+              x: rp.x, 
+              y: rp.y 
+            })) || [],
+            naryDiamonds: multiSelectedElements.naryDiamonds?.map(nd => ({ 
+              relationId: nd.relationId, 
+              x: nd.x, 
+              y: nd.y 
+            })) || []
+          }
+        });
+        e.stopPropagation();
+        return;
+      }
+    }
+  
     if (mode !== 'hand') return;
     e.stopPropagation();
+    
+    // Find the relation to get its diamond position
+    const relation = diagram?.relations?.find(r => r.id === relationId);
+    if (!relation) return;
     
     const startX = e.clientX;
     const startY = e.clientY;
@@ -367,36 +449,96 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
 
   // --- Multi-select bounding box and menu ---
   function renderMultiSelectBoundingBox() {
-    if (!multiSelectedNodes || multiSelectedNodes.length < 2) return null;
-    const box = getBoundingBoxForMultiSelectedNodes(multiSelectedNodes);
-    if (!box) return null;
-    return (
-      <g className="multi-select-bounding-box">
-        <rect
-          x={box.x - 10}
-          y={box.y - 10}
-          width={box.width + 20}
-          height={box.height + 20}
-          fill="transparent"
-          stroke="#4285f4"
-          strokeWidth={2/zoom}
-          strokeDasharray={`${4/zoom},${2/zoom}`}
-          rx={8/zoom}
-          pointerEvents="none"
-        />
-      </g>
-    );
+    // Check if we have mixed selection or just nodes
+    const hasExtendedSelection = multiSelectedElements && 
+      (multiSelectedElements.relationPoints?.length > 0 || multiSelectedElements.naryDiamonds?.length > 0);
+    
+    if (hasExtendedSelection) {
+      // Use mixed selection bounding box
+      const totalElements = (multiSelectedElements.nodes?.length || 0) + 
+                           (multiSelectedElements.relationPoints?.length || 0) + 
+                           (multiSelectedElements.naryDiamonds?.length || 0);
+      if (totalElements < 2) return null;
+      
+      const box = getBoundingBoxForMixedSelection(multiSelectedElements);
+      if (!box) return null;
+      
+      return (
+        <g className="multi-select-bounding-box">
+          <rect
+            x={box.x - 10}
+            y={box.y - 10}
+            width={box.width + 20}
+            height={box.height + 20}
+            fill="transparent"
+            stroke="#4285f4"
+            strokeWidth={2/zoom}
+            strokeDasharray={`${4/zoom},${2/zoom}`}
+            rx={8/zoom}
+            pointerEvents="none"
+          />
+        </g>
+      );
+    } else {
+      // Use traditional node-only selection
+      if (!multiSelectedNodes || multiSelectedNodes.length < 2) return null;
+      const box = getBoundingBoxForMultiSelectedNodes(multiSelectedNodes);
+      if (!box) return null;
+      
+      return (
+        <g className="multi-select-bounding-box">
+          <rect
+            x={box.x - 10}
+            y={box.y - 10}
+            width={box.width + 20}
+            height={box.height + 20}
+            fill="transparent"
+            stroke="#4285f4"
+            strokeWidth={2/zoom}
+            strokeDasharray={`${4/zoom},${2/zoom}`}
+            rx={8/zoom}
+            pointerEvents="none"
+          />
+        </g>
+      );
+    }
   }
 
   function renderMultiSelectMenu() {
-    if (!multiSelectedNodes || multiSelectedNodes.length < 2) return null;
-    const box = getBoundingBoxForMultiSelectedNodes(multiSelectedNodes);
+    // Check if we have mixed selection or just nodes
+    const hasExtendedSelection = multiSelectedElements && 
+      (multiSelectedElements.relationPoints?.length > 0 || multiSelectedElements.naryDiamonds?.length > 0);
+    
+    let box, totalElements, hasNodes;
+    
+    if (hasExtendedSelection) {
+      totalElements = (multiSelectedElements.nodes?.length || 0) + 
+                     (multiSelectedElements.relationPoints?.length || 0) + 
+                     (multiSelectedElements.naryDiamonds?.length || 0);
+      hasNodes = multiSelectedElements.nodes?.length > 0;
+      if (totalElements < 2) return null;
+      box = getBoundingBoxForMixedSelection(multiSelectedElements);
+    } else {
+      if (!multiSelectedNodes || multiSelectedNodes.length < 2) return null;
+      box = getBoundingBoxForMultiSelectedNodes(multiSelectedNodes);
+      hasNodes = true;
+    }
+    
     if (!box) return null;
+    
     const menuX = box.x + box.width + 18;
     const menuY = box.y - 32;
+    
     function handleDeleteAll() {
       if (typeof props.onDeleteMultiSelected === 'function') {
-        props.onDeleteMultiSelected(multiSelectedNodes);
+        if (hasExtendedSelection) {
+          // For extended selection, only delete nodes (relation points and diamonds can't be deleted directly)
+          if (multiSelectedElements.nodes?.length > 0) {
+            props.onDeleteMultiSelected(multiSelectedElements.nodes);
+          }
+        } else {
+          props.onDeleteMultiSelected(multiSelectedNodes);
+        }
       }
     }
     return (
@@ -539,7 +681,7 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
               strokeWidth={(isSelected ? 2 : 1.5) / zoom}
               onMouseDown={(e) => {
                 if (mode === 'hand' && e.button === 0) {
-                  handleDiamondMouseDown(e, { ...relation, diamondPos });
+                  handleNaryDiamondInteractionStart(relation.id, diamondPos.x, diamondPos.y, e);
                 }
                 // In all other cases, do nothing so onClick can fire
               }}
@@ -909,6 +1051,12 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
 
   // Enhance handleMouseMove to show alignment guides and update temporary relation
   function handleMouseMove(e) {
+    // Handle canvas panning first
+    if (isPanning) {
+      handlePanMove(e);
+      return;
+    }
+    
     if (lassoActive && lassoStart && lassoStartedOnCanvas.current) {
       handleLassoMouseMove(e);
       return;
@@ -917,20 +1065,128 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
     if (multiDragStart && diagram && Array.isArray(diagram.nodes)) {
       const deltaX = (e.clientX - multiDragStart.startX) / zoom;
       const deltaY = (e.clientY - multiDragStart.startY) / zoom;
-      const updatedNodes = diagram.nodes.map(node => {
-        const dragNode = multiDragStart.nodePositions.find(n => n.id === node.id);
-        if (dragNode) {
-          return { ...node, x: dragNode.x + deltaX, y: dragNode.y + deltaY };
+      
+      // Handle extended multi-drag (nodes + relation points + nary diamonds)
+      if (multiDragStart.type === 'extended' && multiDragStart.selectedElements) {
+        // Update nodes
+        const updatedNodes = diagram.nodes.map(node => {
+          const dragNode = multiDragStart.selectedElements.nodes.find(n => n.id === node.id);
+          if (dragNode) {
+            return { ...node, x: dragNode.x + deltaX, y: dragNode.y + deltaY };
+          }
+          return node;
+        });
+        
+        // Update relations with waypoints and diamond positions
+        const updatedRelations = diagram.relations.map(relation => {
+          let updatedRelation = { ...relation };
+          
+          // Check if both source and target nodes are being moved
+          const selectedNodeIds = multiDragStart.selectedElements.nodes.map(n => n.id);
+          const bothNodesSelected = selectedNodeIds.includes(relation.sourceId) && 
+                                   selectedNodeIds.includes(relation.targetId);
+          
+          // Update relation waypoints if they're in the selection
+          if (multiDragStart.selectedElements.relationPoints) {
+            const relationWaypoints = multiDragStart.selectedElements.relationPoints
+              .filter(rp => rp.relationId === relation.id);
+            
+            if (relationWaypoints.length > 0 && Array.isArray(relation.waypoints)) {
+              updatedRelation.waypoints = relation.waypoints.map((wp, index) => {
+                const dragWaypoint = relationWaypoints.find(rp => rp.waypointIndex === index);
+                if (dragWaypoint) {
+                  return { ...wp, x: dragWaypoint.x + deltaX, y: dragWaypoint.y + deltaY };
+                }
+                return wp;
+              });
+            }
+          }
+          
+          // If both source and target nodes are being moved together, 
+          // recalculate endpoints to ensure they stay connected to node boundaries
+          if (bothNodesSelected && updatedRelation.waypoints && updatedRelation.waypoints.length >= 2) {
+            const tempDiagram = { 
+              nodes: updatedNodes, 
+              relations: [updatedRelation] 
+            };
+            updatedRelation = updateRelationsForNode(
+              updatedNodes.find(n => n.id === relation.sourceId), 
+              tempDiagram
+            )[0];
+          }
+          
+          // Update nary diamond positions if they're in the selection
+          if (multiDragStart.selectedElements.naryDiamonds) {
+            const dragDiamond = multiDragStart.selectedElements.naryDiamonds
+              .find(nd => nd.relationId === relation.id);
+            if (dragDiamond && relation.diamondPos) {
+              updatedRelation.diamondPos = {
+                x: dragDiamond.x + deltaX,
+                y: dragDiamond.y + deltaY
+              };
+            }
+          }
+          
+          return updatedRelation;
+        });
+        
+        if (typeof onNodeEdit === 'function') {
+          onNodeEdit(updatedNodes);
         }
-        return node;
-      });
-      if (typeof onNodeEdit === 'function') {
-        onNodeEdit(updatedNodes);
+        if (typeof onRelationEdit === 'function') {
+          onRelationEdit(updatedRelations);
+        }
       }
-      // Optionally update relations
-      if (typeof onRelationEdit === 'function' && diagram && Array.isArray(diagram.relations)) {
-        onRelationEdit(diagram.relations);
+      // Handle traditional multi-drag (nodes only)
+      else if (multiDragStart.nodePositions) {
+        const updatedNodes = diagram.nodes.map(node => {
+          const dragNode = multiDragStart.nodePositions.find(n => n.id === node.id);
+          if (dragNode) {
+            return { ...node, x: dragNode.x + deltaX, y: dragNode.y + deltaY };
+          }
+          return node;
+        });
+        if (typeof onNodeEdit === 'function') {
+          onNodeEdit(updatedNodes);
+        }
+        // Update relations to recalculate endpoints for moved nodes
+        if (typeof onRelationEdit === 'function' && diagram && Array.isArray(diagram.relations)) {
+          const movedNodeIds = multiDragStart.nodePositions.map(n => n.id);
+          const updatedRelations = diagram.relations.map(relation => {
+            // Check if both source and target nodes are being moved
+            const bothNodesSelected = movedNodeIds.includes(relation.sourceId) && 
+                                     movedNodeIds.includes(relation.targetId);
+            
+            if (bothNodesSelected) {
+              // If both nodes are moved, recalculate endpoints
+              const tempDiagram = { 
+                nodes: updatedNodes, 
+                relations: [relation] 
+              };
+              return updateRelationsForNode(
+                updatedNodes.find(n => n.id === relation.sourceId), 
+                tempDiagram
+              )[0];
+            } else if (movedNodeIds.includes(relation.sourceId) || movedNodeIds.includes(relation.targetId)) {
+              // If only one node is moved, use normal single-node update logic
+              const movedNode = updatedNodes.find(n => 
+                movedNodeIds.includes(n.id) && 
+                (n.id === relation.sourceId || n.id === relation.targetId)
+              );
+              if (movedNode) {
+                const tempDiagram = { 
+                  nodes: updatedNodes, 
+                  relations: [relation] 
+                };
+                return updateRelationsForNode(movedNode, tempDiagram)[0];
+              }
+            }
+            return relation;
+          });
+          onRelationEdit(updatedRelations);
+        }
       }
+      
       // Update last mouse position for bounding box
       setMultiDragStart(prev => prev ? { ...prev, lastClientX: e.clientX, lastClientY: e.clientY } : prev);
       return;
@@ -989,22 +1245,122 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
       const deltaX = (multiDragStart.lastClientX !== undefined ? multiDragStart.lastClientX : multiDragStart.startX) - multiDragStart.startX;
       const deltaY = (multiDragStart.lastClientY !== undefined ? multiDragStart.lastClientY : multiDragStart.startY) - multiDragStart.startY;
       const moved = deltaX !== 0 || deltaY !== 0;
-      const updatedNodes = diagram.nodes.map(node => {
-        const dragNode = multiDragStart.nodePositions.find(n => n.id === node.id);
-        if (dragNode) {
-          return { ...node, x: dragNode.x + deltaX / zoom, y: dragNode.y + deltaY / zoom };
+      
+      // Handle extended multi-drag (nodes + relation points + nary diamonds)
+      if (multiDragStart.type === 'extended' && multiDragStart.selectedElements) {
+        const scaledDeltaX = deltaX / zoom;
+        const scaledDeltaY = deltaY / zoom;
+        
+        // Update nodes
+        const updatedNodes = diagram.nodes.map(node => {
+          const dragNode = multiDragStart.selectedElements.nodes.find(n => n.id === node.id);
+          if (dragNode) {
+            return { ...node, x: dragNode.x + scaledDeltaX, y: dragNode.y + scaledDeltaY };
+          }
+          return node;
+        });
+        
+        // Update relations with waypoints and diamond positions
+        const updatedRelations = diagram.relations.map(relation => {
+          let updatedRelation = { ...relation };
+          
+          // Check if both source and target nodes are being moved
+          const selectedNodeIds = multiDragStart.selectedElements.nodes.map(n => n.id);
+          const bothNodesSelected = selectedNodeIds.includes(relation.sourceId) && 
+                                   selectedNodeIds.includes(relation.targetId);
+          
+          // Update relation waypoints if they're in the selection
+          if (multiDragStart.selectedElements.relationPoints) {
+            const relationWaypoints = multiDragStart.selectedElements.relationPoints
+              .filter(rp => rp.relationId === relation.id);
+            
+            if (relationWaypoints.length > 0 && Array.isArray(relation.waypoints)) {
+              updatedRelation.waypoints = relation.waypoints.map((wp, index) => {
+                const dragWaypoint = relationWaypoints.find(rp => rp.waypointIndex === index);
+                if (dragWaypoint) {
+                  return { ...wp, x: dragWaypoint.x + scaledDeltaX, y: dragWaypoint.y + scaledDeltaY };
+                }
+                return wp;
+              });
+            }
+          }
+          
+          // If both source and target nodes are being moved together, 
+          // recalculate endpoints to ensure they stay connected to node boundaries
+          if (bothNodesSelected && updatedRelation.waypoints && updatedRelation.waypoints.length >= 2) {
+            const tempDiagram = { 
+              nodes: updatedNodes, 
+              relations: [updatedRelation] 
+            };
+            updatedRelation = updateRelationsForNode(
+              updatedNodes.find(n => n.id === relation.sourceId), 
+              tempDiagram
+            )[0];
+          }
+          
+          // Update nary diamond positions if they're in the selection
+          if (multiDragStart.selectedElements.naryDiamonds) {
+            const dragDiamond = multiDragStart.selectedElements.naryDiamonds
+              .find(nd => nd.relationId === relation.id);
+            if (dragDiamond && relation.diamondPos) {
+              updatedRelation.diamondPos = {
+                x: dragDiamond.x + scaledDeltaX,
+                y: dragDiamond.y + scaledDeltaY
+              };
+            }
+          }
+          
+          return updatedRelation;
+        });
+        
+        if (typeof onNodeEdit === 'function') {
+          onNodeEdit(updatedNodes);
         }
-        return node;
-      });
-      if (typeof onNodeEdit === 'function') {
-        onNodeEdit(updatedNodes);
+        if (typeof onRelationEdit === 'function') {
+          onRelationEdit(updatedRelations);
+        }
+        
+        // Update extended multi-selection to new positions
+        if (props.setMultiSelectedElements) {
+          const newExtendedSelection = {
+            nodes: updatedNodes.filter(n => 
+              multiDragStart.selectedElements.nodes.some(sn => sn.id === n.id)
+            ),
+            relationPoints: multiDragStart.selectedElements.relationPoints?.map(rp => ({
+              ...rp,
+              x: rp.x + scaledDeltaX,
+              y: rp.y + scaledDeltaY
+            })) || [],
+            naryDiamonds: multiDragStart.selectedElements.naryDiamonds?.map(nd => ({
+              ...nd,
+              x: nd.x + scaledDeltaX,
+              y: nd.y + scaledDeltaY
+            })) || []
+          };
+          props.setMultiSelectedElements(newExtendedSelection);
+        }
       }
+      // Handle traditional multi-drag (nodes only)
+      else if (multiDragStart.nodePositions) {
+        const updatedNodes = diagram.nodes.map(node => {
+          const dragNode = multiDragStart.nodePositions.find(n => n.id === node.id);
+          if (dragNode) {
+            return { ...node, x: dragNode.x + deltaX / zoom, y: dragNode.y + deltaY / zoom };
+          }
+          return node;
+        });
+        if (typeof onNodeEdit === 'function') {
+          onNodeEdit(updatedNodes);
+        }
+        
+        // Update selection to new node positions
+        if (props.setMultiSelectedNodes) {
+          const newSelection = updatedNodes.filter(n => multiDragStart.nodeIds.includes(n.id));
+          props.setMultiSelectedNodes(newSelection);
+        }
+      }
+      
       setMultiDragStart(null);
-      // Update selection to new node positions
-      if (props.setMultiSelectedNodes) {
-        const newSelection = updatedNodes.filter(n => multiDragStart.nodeIds.includes(n.id));
-        props.setMultiSelectedNodes(newSelection);
-      }
       if (moved && saveToUndoStack) saveToUndoStack();
       return;
     }

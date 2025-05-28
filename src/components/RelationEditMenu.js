@@ -142,10 +142,8 @@ export function RelationEditMenu({
       ...diagram,
       relations: diagram.relations.filter(r => r.id !== relation.id)
     }));
-    // Close the popup after deletion
     setEditNodePopup(null);
     setEditNodePopupPos({ x: null, y: null });
-    // Deselect the relation
     setSelectedElement(null);
   };
 
@@ -186,12 +184,13 @@ export function RelationEditMenu({
         right: 0,
         top: 0,
         bottom: 0,
-        width: '300px',
+        width: 'min(240px, 25vw)',
+        minWidth: '200px',
         background: '#fff',
-        borderLeft: '1px solid #1976d2',
+        borderLeft: '1px solidrgb(255, 255, 255)',
         boxShadow: '-2px 0 12px rgba(0,0,0,0.1)',
         zIndex: 1000,
-        padding: '20px',
+        padding: '12px',
         overflowY: 'auto',
         pointerEvents: 'auto',
         display: 'flex',
@@ -202,9 +201,9 @@ export function RelationEditMenu({
         className="condec-sidebar-header"
         style={{
           fontWeight: 600,
-          fontSize: 16,
+          fontSize: 'clamp(13px, 2vw, 15px)',
           color: '#1976d2',
-          marginBottom: 16,
+          marginBottom: 10,
           userSelect: 'none',
           display: 'flex',
           alignItems: 'center',
@@ -220,9 +219,9 @@ export function RelationEditMenu({
             background: 'none',
             border: 'none',
             cursor: 'pointer',
-            fontSize: '18px',
+            fontSize: '16px',
             color: '#666',
-            padding: '4px'
+            padding: '2px'
           }}
           title="Close"
         >
@@ -230,19 +229,19 @@ export function RelationEditMenu({
         </button>
       </div>
       
-      <div className="property-group" style={{ marginBottom: 16 }}>
+      <div className="property-group" style={{ marginBottom: 10 }}>
         {/* Source-Target Direction Control */}
         <div className="relation-direction-control" style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          gap: '10px',
-          margin: '0 0 16px 0',
-          padding: '10px',
+          gap: '6px',
+          margin: '0 0 10px 0',
+          padding: '6px',
           background: '#f5f5f5',
-          borderRadius: '8px'
+          borderRadius: '4px'
         }}>
-          <div style={{ flex: 1, textAlign: 'right', fontWeight: 'bold', fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <div style={{ flex: 1, textAlign: 'right', fontWeight: 'bold', fontSize: 'clamp(10px, 1.2vw, 12px)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {sourceNode?.name || 'Source'}
           </div>
           {/* Single arrow button for direction */}
@@ -252,41 +251,41 @@ export function RelationEditMenu({
               background: '#e3f2fd',
               border: '1px solid #1976d2',
               borderRadius: '50%',
-              width: '36px',
-              height: '36px',
+              width: 'clamp(24px, 3vw, 28px)',
+              height: 'clamp(24px, 3vw, 28px)',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               padding: 0,
-              minWidth: '36px',
+              minWidth: '24px',
               flexShrink: 0
             }}
             title="Reverse relation direction"
           >
             {/* Single arrow icon*/}
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#000000" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#000000" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="5" y1="12" x2="19" y2="12"/>
               <polyline points="12 5 19 12 12 19"/>
             </svg>
           </button>
-          <div style={{ flex: 1, fontWeight: 'bold', fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {targetNode?.name || 'No name for the target node'}
+          <div style={{ flex: 1, fontWeight: 'bold', fontSize: 'clamp(10px, 1.2vw, 12px)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {targetNode?.name || 'Target'}
           </div>
         </div>
         
         {/* Source Node Selection */}
-        <label style={{ display: 'block', marginBottom: 6, fontWeight: 500 }}>Source Node:</label>
+        <label style={{ display: 'block', marginBottom: 3, fontWeight: 500, fontSize: 'clamp(11px, 1.4vw, 13px)' }}>Source:</label>
         <select
           value={sourceNodeId}
           onChange={handleChangeSource}
           style={{
             width: '100%',
-            padding: '8px',
-            borderRadius: 4,
+            padding: '4px',
+            borderRadius: 3,
             border: '1px solid #ccc',
-            fontSize: 14,
-            marginBottom: 12
+            fontSize: 'clamp(11px, 1.2vw, 12px)',
+            marginBottom: 8
           }}
         >
           {nodes.map(node => (
@@ -297,17 +296,17 @@ export function RelationEditMenu({
         </select>
         
         {/* Target Node Selection */}
-        <label style={{ display: 'block', marginBottom: 6, fontWeight: 500 }}>Target Node:</label>
+        <label style={{ display: 'block', marginBottom: 3, fontWeight: 500, fontSize: 'clamp(11px, 1.4vw, 13px)' }}>Target:</label>
         <select
           value={targetNodeId}
           onChange={handleChangeTarget}
           style={{
             width: '100%',
-            padding: '8px',
-            borderRadius: 4,
+            padding: '4px',
+            borderRadius: 3,
             border: '1px solid #ccc',
-            fontSize: 14,
-            marginBottom: 12
+            fontSize: 'clamp(11px, 1.2vw, 12px)',
+            marginBottom: 8
           }}
         >
           {nodes.map(node => (
@@ -318,34 +317,51 @@ export function RelationEditMenu({
         </select>
         
         {/* Relation Type Selection */}
-        <label style={{ display: 'block', marginBottom: 6, fontWeight: 500 }}>Relation Type:</label>
+        <label style={{ display: 'block', marginBottom: 3, fontWeight: 500, fontSize: 'clamp(11px, 1.4vw, 13px)' }}>Type:</label>
         <select
           value={relationType}
           onChange={handleChangeType}
           style={{
             width: '100%',
-            padding: '8px',
-            borderRadius: 4,
+            padding: '4px',
+            borderRadius: 3,
             border: '1px solid #ccc',
-            fontSize: 14
+            fontSize: 'clamp(11px, 1.2vw, 12px)',
+            marginBottom: 4
           }}
         >
           {renderRelationOptions()}
         </select>
+        
+        {/* Relation Description */}
+        <div style={{
+          padding: '4px',
+          background: '#f8f9fa',
+          border: '1px solid #e9ecef',
+          borderRadius: 3,
+          fontSize: 'clamp(10px, 1.1vw, 11px)',
+          color: '#495057',
+          lineHeight: '1.2',
+          fontStyle: 'italic',
+          maxHeight: '60px',
+          overflowY: 'auto'
+        }}>
+          {relationDescriptions[relationType]}
+        </div>
       </div>
     
 
-      <div style={{ marginTop: 'auto', paddingTop: '16px' }}>
+      <div style={{ marginTop: 'auto', paddingTop: '8px' }}>
         <button
           style={{
             width: '100%',
             background: '#d32f2f',
             color: '#fff',
             border: 'none',
-            borderRadius: 4,
-            padding: '8px 16px',
+            borderRadius: 3,
+            padding: '10px 15px',
             cursor: 'pointer',
-            fontSize: 14,
+            fontSize: 'clamp(11px, 1.2vw, 12px)',
             marginBottom: '8px'
           }}
           onClick={handleDeleteRelation}
