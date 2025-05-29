@@ -105,39 +105,6 @@ export function getNaryDiamondsInMultiSelectionBox(relations, selectionBox) {
     }));
 }
 
-// Helper function to calculate midpoint of a path
-function getPathMidpoint(waypoints) {
-  if (waypoints.length < 2) return waypoints[0] || { x: 0, y: 0 };
-
-  // Calculate total length
-  let totalLength = 0;
-  const segmentLengths = [];
-  for (let i = 0; i < waypoints.length - 1; i++) {
-    const dx = waypoints[i + 1].x - waypoints[i].x;
-    const dy = waypoints[i + 1].y - waypoints[i].y;
-    const len = Math.hypot(dx, dy);
-    segmentLengths.push(len);
-    totalLength += len;
-  }
-  if (totalLength === 0) return waypoints[0];
-
-  // Find the segment containing the midpoint
-  let midDist = totalLength / 2;
-  let acc = 0;
-  for (let i = 0; i < segmentLengths.length; i++) {
-    if (acc + segmentLengths[i] >= midDist) {
-      const remain = midDist - acc;
-      const ratio = remain / segmentLengths[i];
-      const x = waypoints[i].x + (waypoints[i + 1].x - waypoints[i].x) * ratio;
-      const y = waypoints[i].y + (waypoints[i + 1].y - waypoints[i].y) * ratio;
-      return { x, y };
-    }
-    acc += segmentLengths[i];
-  }
-  // Fallback
-  return waypoints[waypoints.length - 1];
-}
-
 // Returns all selectable elements inside the selection rectangle
 export function getAllSelectableElementsInBox(nodes, relations, selectionBox) {
   if (!selectionBox) return { nodes: [], relationPoints: [], naryDiamonds: [] };

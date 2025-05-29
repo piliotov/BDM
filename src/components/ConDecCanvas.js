@@ -509,19 +509,17 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
     const hasExtendedSelection = multiSelectedElements && 
       (multiSelectedElements.relationPoints?.length > 0 || multiSelectedElements.naryDiamonds?.length > 0);
     
-    let box, totalElements, hasNodes;
+    let box, totalElements;
     
     if (hasExtendedSelection) {
       totalElements = (multiSelectedElements.nodes?.length || 0) + 
                      (multiSelectedElements.relationPoints?.length || 0) + 
                      (multiSelectedElements.naryDiamonds?.length || 0);
-      hasNodes = multiSelectedElements.nodes?.length > 0;
       if (totalElements < 2) return null;
       box = getBoundingBoxForMixedSelection(multiSelectedElements);
     } else {
       if (!multiSelectedNodes || multiSelectedNodes.length < 2) return null;
       box = getBoundingBoxForMultiSelectedNodes(multiSelectedNodes);
-      hasNodes = true;
     }
     
     if (!box) return null;
@@ -1233,6 +1231,11 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
         onSelectionMouseMove && onSelectionMouseMove(e);
       }
     }
+    
+    // Call the parent's mouse move handler
+    if (props.onCanvasMouseMove) {
+      props.onCanvasMouseMove(e);
+    }
   }
 
   function handleMouseUp(e) {
@@ -1517,6 +1520,41 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
     );
   }
 
+  // Function to render hologram node preview
+  function renderHologramNode() {
+    if (props.mode !== 'addActivity' || !props.hologramNodePosition) return null;
+    const hologramPos = props.hologramNodePosition;
+    const defaultWidth = 100;
+    const defaultHeight = 50;
+    return (
+      <g className="hologram-node" style={{ pointerEvents: 'none' }}>
+        <rect
+          x={hologramPos.x - defaultWidth/2}
+          y={hologramPos.y - defaultHeight/2}
+          width={defaultWidth}
+          height={defaultHeight}
+          fill="rgba(26, 115, 232, 0.2)"
+          stroke="#1a73e8"
+          strokeWidth={2}
+          strokeDasharray="5,5"
+          rx={8}
+          ry={8}
+        />
+        <text
+          x={hologramPos.x}
+          y={hologramPos.y}
+          textAnchor="middle"
+          dominantBaseline="middle"
+          fontSize="14px"
+          fill="#1a73e8"
+          style={{ userSelect: 'none' }}
+        >
+          New Activity
+        </text>
+      </g>
+    );
+  }
+
   let cursorStyle = 'default';
   if (mode === 'hand') {
     cursorStyle = isPanning ? 'grabbing' : (draggedElement ? 'grabbing' : 'grab');
@@ -1526,6 +1564,8 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
     cursorStyle = relationCreationState.active ? 'crosshair' : 'pointer';
   } else if (mode === 'connectFromNodeMenu') {
     cursorStyle = connectFromNodeMenu ? 'crosshair' : 'pointer';
+  } else if (props.mode === 'addActivity') {
+    cursorStyle = 'crosshair';
   }
 
   return (
@@ -1587,7 +1627,6 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
         style={{ cursor: cursorStyle, userSelect: 'none' }}
       >
         <RelationMarkers />
-
         <g transform={`translate(${canvasOffset.x},${canvasOffset.y}) scale(${zoom})`}>
           {alignmentGuides.x !== null && (
             <line
@@ -1614,7 +1653,7 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
             />
           )}
           {renderDiagramElements()}
-          
+          {renderHologramNode()}
           {mode === 'select' && selectionBox && (
             <rect
               x={selectionBox.x}

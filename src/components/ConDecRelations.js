@@ -109,7 +109,7 @@ export function ConDecRelation({
       window.removeEventListener('mousemove', handleWaypointDrag);
       window.removeEventListener('mouseup', handleWaypointDragEnd);
     };
-  }, [draggedWaypointIndex, currentWaypoints, relation.id, canvasOffset, zoom, onWaypointDrag, onWaypointDragEnd, onAlignmentCheck]);
+  }, [draggedWaypointIndex, currentWaypoints, relation, sourceNode, targetNode, canvasOffset, zoom, onWaypointDrag, onWaypointDragEnd, onAlignmentCheck]);
 
   useEffect(() => {
     if (!isDraggingLabel) return;
@@ -166,7 +166,7 @@ export function ConDecRelation({
       window.removeEventListener('mousemove', handleLabelDrag);
       window.removeEventListener('mouseup', handleLabelDragEnd);
     };
-  }, [isDraggingLabel, relation, currentWaypoints, canvasOffset, zoom, onWaypointDrag, onWaypointDragEnd, labelOffset, onAlignmentCheck]);
+  }, [isDraggingLabel, relation, currentWaypoints, onWaypointDrag, onWaypointDragEnd, labelOffset, onAlignmentCheck]);
 
   // Check for n-ary relation AFTER all hooks
   if (relation.activities && Array.isArray(relation.activities) && relation.activities.length > 1) {
