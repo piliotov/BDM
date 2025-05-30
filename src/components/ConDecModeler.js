@@ -340,6 +340,57 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {}, loadedFile
     setMultiSelectedNodes([]);
   };
 
+  // Handle delete for extended multi-selection (nodes + relations)
+  const handleDeleteMultiSelectedExtended = (selectedElements) => {
+    if (!selectedElements) return;
+    
+    const { nodes: nodesToDelete = [], naryDiamonds: relationDiamondsToDelete = [] } = selectedElements;
+    
+    if (nodesToDelete.length === 0 && relationDiamondsToDelete.length === 0) return;
+    
+    saveToUndoStack();
+    
+    // Get IDs of nodes and relations to delete
+    const nodeIds = nodesToDelete.map(n => n.id);
+    const relationIds = relationDiamondsToDelete.map(nd => nd.relationId);
+    
+    // Filter out deleted nodes
+    const updatedNodes = diagram.nodes.filter(n => !nodeIds.includes(n.id));
+    
+    // Filter out deleted relations and relations connected to deleted nodes
+    const updatedRelations = diagram.relations.filter(r => {
+      // Remove if relation ID is in the deletion list
+      if (relationIds.includes(r.id)) return false;
+      // Remove if connected to deleted nodes
+      if (nodeIds.includes(r.sourceId) || nodeIds.includes(r.targetId)) return false;
+      // Keep if n-ary relation and some nodes remain
+      if (r.activities && Array.isArray(r.activities)) {
+        const remainingActivities = r.activities.filter(activityId => !nodeIds.includes(activityId));
+        if (remainingActivities.length < 2) return false; // N-ary needs at least 2 nodes
+      }
+      return true;
+    });
+    
+    // Update n-ary relations to remove deleted activity nodes
+    const finalRelations = updatedRelations.map(r => {
+      if (r.activities && Array.isArray(r.activities)) {
+        const remainingActivities = r.activities.filter(activityId => !nodeIds.includes(activityId));
+        return { ...r, activities: remainingActivities };
+      }
+      return r;
+    });
+    
+    setDiagram({
+      ...diagram,
+      nodes: updatedNodes,
+      relations: finalRelations
+    });
+    
+    // Clear selections
+    setMultiSelectedNodes([]);
+    setMultiSelectedElements({ nodes: [], relationPoints: [], naryDiamonds: [] });
+  };
+
   // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -960,6 +1011,7 @@ const ConDecModeler = ({ width = '100%', height = '100%', style = {}, loadedFile
           onAppend={handleAppendActivity}
           setMode={setMode}
           onDeleteMultiSelected={handleDeleteMultiSelected}
+          onDeleteMultiSelectedExtended={handleDeleteMultiSelectedExtended}
           naryStartNode={naryStartNode}
           setNaryStartNode={setNaryStartNode}
           naryMouse={naryMouse}
