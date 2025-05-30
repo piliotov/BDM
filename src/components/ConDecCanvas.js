@@ -8,6 +8,7 @@ import { updateRelationsForNode } from '../utils/relationUtils';
 import { RelationMarkers } from '../utils/relationIconUtils';
 import { endConnectMode,getConnectModeState,} from '../utils/connectModeUtils';
 import { getBoundingBoxForMultiSelectedNodes, getAllSelectableElementsInBox, getBoundingBoxForMixedSelection } from '../utils/multiSelectionUtils';
+import { getAlignmentGuidesForPoint, renderAlignmentGuidesSVG } from '../utils/alignmentUtils';
 
 
 export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
@@ -365,86 +366,17 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
     }
   };
 
-  // Helper: find alignment lines for any point (node center, relation waypoint, or relation midpoint)
-  function getAlignmentGuidesForPoint(point, nodes, relations, excludeRelationId = null) {
-    if (!point) return { x: null, y: null };
-    const threshold = 2;
-    let guideX = null, guideY = null;
-    // Check node centers
-    for (const n of nodes) {
-      if (Math.abs(n.x - point.x) <= threshold) guideX = n.x;
-      if (Math.abs(n.y - point.y) <= threshold) guideY = n.y;
-    }
-    // Check relation waypoints and midpoints
-    for (const rel of relations) {
-      if (rel.id === excludeRelationId) continue;
-      if (Array.isArray(rel.waypoints)) {
-        for (const wp of rel.waypoints) {
-          if (Math.abs(wp.x - point.x) <= threshold) guideX = wp.x;
-          if (Math.abs(wp.y - point.y) <= threshold) guideY = wp.y;
-        }
-        // Check midpoint of the relation path
-        if (rel.waypoints.length >= 2) {
-          const midIdx = Math.floor(rel.waypoints.length / 2);
-          let mid;
-          if (rel.waypoints.length % 2 === 0) {
-            // Even: average two middle points
-            const a = rel.waypoints[midIdx - 1], b = rel.waypoints[midIdx];
-            mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-          } else {
-            mid = rel.waypoints[midIdx];
-          }
-          if (Math.abs(mid.x - point.x) <= threshold) guideX = mid.x;
-          if (Math.abs(mid.y - point.y) <= threshold) guideY = mid.y;
-        }
-      }
-    }
-    return { x: guideX, y: guideY };
-  }
-
   // Handler for alignment check from relation drag
   const handleAlignmentCheck = (point, relationId = null) => {
     if (diagram && Array.isArray(diagram.nodes) && Array.isArray(diagram.relations)) {
-      const guides = getAlignmentGuidesForPoint(point, diagram.nodes, diagram.relations, relationId);
+      const guides = getAlignmentGuidesForPoint(point, diagram.nodes);
       setAlignmentGuides(guides);
     }
   };
 
   // --- Render alignment guides as SVG lines ---
   function renderAlignmentGuides() {
-    if (!alignmentGuides.x && !alignmentGuides.y) return null;
-    // Get canvas bounds
-    const minX = 0, minY = 0;
-    // Use a large max value to cover the visible area
-    const maxX = 4000, maxY = 2000;
-    return (
-      <g className="alignment-guides">
-        {alignmentGuides.x !== null && (
-          <line
-            x1={alignmentGuides.x}
-            y1={minY}
-            x2={alignmentGuides.x}
-            y2={maxY}
-            stroke="#1a73e8"
-            strokeDasharray="6,4"
-            strokeWidth={2}
-            pointerEvents="none"
-          />
-        )}
-        {alignmentGuides.y !== null && (
-          <line
-            x1={minX}
-            y1={alignmentGuides.y}
-            x2={maxX}
-            y2={alignmentGuides.y}
-            stroke="#1a73e8"
-            strokeDasharray="6,4"
-            strokeWidth={2}
-            pointerEvents="none"
-          />
-        )}
-      </g>
-    );
+    return renderAlignmentGuidesSVG(alignmentGuides, zoom);
   }
 
   // --- Multi-select bounding box and menu ---
@@ -1523,11 +1455,13 @@ export const ConDecCanvas = forwardRef(function ConDecCanvas(props, ref) {
   // Function to render hologram node preview
   function renderHologramNode() {
     if (props.mode !== 'addActivity' || !props.hologramNodePosition) return null;
+    const guides = getAlignmentGuidesForPoint(props.hologramNodePosition, diagram?.nodes || []);
     const hologramPos = props.hologramNodePosition;
     const defaultWidth = 100;
     const defaultHeight = 50;
     return (
       <g className="hologram-node" style={{ pointerEvents: 'none' }}>
+        {renderAlignmentGuidesSVG(guides, zoom)}
         <rect
           x={hologramPos.x - defaultWidth/2}
           y={hologramPos.y - defaultHeight/2}
